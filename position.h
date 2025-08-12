@@ -28,6 +28,8 @@
 #include "bitboard.h"
 #include "types.h"
 
+namespace Stockfish {
+
 class TranspositionTable;
 
 // StateInfo struct stores information needed to restore a Position object to
@@ -365,7 +367,6 @@ inline void Position::do_move(Move m, StateInfo& newSt, const TranspositionTable
 
 inline StateInfo* Position::state() const { return st; }
 
-
-
+}  // namespace Stockfish
 
 #endif  // #ifndef POSITION_H_INCLUDED

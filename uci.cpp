@@ -1,5 +1,7 @@
 #include "uci.h"
 
+namespace Stockfish {
+
 std::string square_to_uci(Square s) {
     return std::string{char('a' + file_of(s)), char('1' + rank_of(s))};
 }
@@ -23,4 +25,6 @@ std::string move_to_uci(Move m, bool chess960) {
         move += " pnbrqk"[m.promotion_type()];
 
     return move;
+}
+
 }

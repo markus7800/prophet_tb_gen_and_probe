@@ -25,9 +25,11 @@
 #include "position.h"
 #include "types.h"
 #include "uci.h"
+#include "misc.h"
 
 #include <iostream>
 
+namespace Stockfish::Benchmark {
 
 // Utility to verify move generation. All the leaf nodes up
 // to the given depth are generated and counted, and the sum is returned.
@@ -68,6 +70,6 @@ inline uint64_t perft(const std::string& fen, Depth depth, bool isChess960) {
     std::cout << (double) (t1-t0) / 1000.0 << "s" << std::endl;
     return res;
 }
-
+}
 
 #endif  // PERFT_H_INCLUDED

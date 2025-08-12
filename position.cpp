@@ -17,7 +17,6 @@
 */
 
 #include "position.h"
-#include "uci.h"
 
 #include <algorithm>
 #include <array>
@@ -33,13 +32,15 @@
 #include <utility>
 
 #include "bitboard.h"
-// #include "misc.h"
+#include "misc.h"
 #include "movegen.h"
 // #include "syzygy/tbprobe.h"
 // #include "tt.h"
-// #include "uci.h"
+#include "uci.h"
 
 using std::string;
+
+namespace Stockfish {
 
 namespace Zobrist {
 
@@ -56,6 +57,7 @@ constexpr std::string_view PieceToChar(" PNBRQK  pnbrqk");
 static constexpr Piece Pieces[] = {W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING,
                                    B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING};
 }  // namespace
+
 
 // Returns an ASCII representation of the position
 std::ostream& operator<<(std::ostream& os, const Position& pos) {
@@ -76,6 +78,19 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
 
     for (Bitboard b = pos.checkers(); b;)
         os << square_to_uci(pop_lsb(b)) << " ";
+
+    // if (int(Tablebases::MaxCardinality) >= popcount(pos.pieces()) && !pos.can_castle(ANY_CASTLING))
+    // {
+    //     StateInfo st;
+
+    //     Position p;
+    //     p.set(pos.fen(), pos.is_chess960(), &st);
+    //     Tablebases::ProbeState s1, s2;
+    //     Tablebases::WDLScore   wdl = Tablebases::probe_wdl(p, &s1);
+    //     int                    dtz = Tablebases::probe_dtz(p, &s2);
+    //     os << "\nTablebases WDL: " << std::setw(4) << wdl << " (" << s1 << ")"
+    //        << "\nTablebases DTZ: " << std::setw(4) << dtz << " (" << s2 << ")";
+    // }
 
     return os;
 }
@@ -908,6 +923,8 @@ DirtyPiece Position::do_move(Move                      m,
 
     // Update the key with the final value
     st->key = k;
+    // if (tt)
+    //     prefetch(tt->first_entry(key()));
 
     // Calculate the repetition info. It is the ply distance from the previous
     // occurrence of the same position, negative in the 3-fold case, or zero
@@ -1051,6 +1068,7 @@ void Position::do_null_move(StateInfo& newSt, const TranspositionTable& tt) {
     }
 
     st->key ^= Zobrist::side;
+    // prefetch(tt.first_entry(key()));
 
     st->pliesFromNull = 0;
 
@@ -1342,3 +1360,5 @@ bool Position::pos_is_ok() const {
 
     return true;
 }
+
+}  // namespace Stockfish

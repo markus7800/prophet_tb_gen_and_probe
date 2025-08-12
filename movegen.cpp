@@ -24,8 +24,67 @@
 #include "bitboard.h"
 #include "position.h"
 
+#if defined(USE_AVX512ICL)
+    #include <array>
+    #include <algorithm>
+    #include <immintrin.h>
+#endif
+
+namespace Stockfish {
+
 namespace {
 
+#if defined(USE_AVX512ICL)
+
+inline Move* write_moves(Move* moveList, uint32_t mask, __m512i vector) {
+    _mm512_storeu_si512(reinterpret_cast<__m512i*>(moveList),
+                        _mm512_maskz_compress_epi16(mask, vector));
+    return moveList + popcount(mask);
+}
+
+template<Direction offset>
+inline Move* splat_pawn_moves(Move* moveList, Bitboard to_bb) {
+    alignas(64) static constexpr auto SPLAT_TABLE = [] {
+        std::array<Move, 64> table{};
+        for (int8_t i = 0; i < 64; i++)
+        {
+            Square from{std::clamp<int8_t>(i - offset, 0, 63)};
+            table[i] = {Move(from, Square{i})};
+        }
+        return table;
+    }();
+
+    auto table = reinterpret_cast<const __m512i*>(SPLAT_TABLE.data());
+
+    moveList =
+      write_moves(moveList, static_cast<uint32_t>(to_bb >> 0), _mm512_load_si512(table + 0));
+    moveList =
+      write_moves(moveList, static_cast<uint32_t>(to_bb >> 32), _mm512_load_si512(table + 1));
+
+    return moveList;
+}
+
+inline Move* splat_moves(Move* moveList, Square from, Bitboard to_bb) {
+    alignas(64) static constexpr auto SPLAT_TABLE = [] {
+        std::array<Move, 64> table{};
+        for (int8_t i = 0; i < 64; i++)
+            table[i] = {Move(SQUARE_ZERO, Square{i})};
+        return table;
+    }();
+
+    __m512i fromVec = _mm512_set1_epi16(Move(from, SQUARE_ZERO).raw());
+
+    auto table = reinterpret_cast<const __m512i*>(SPLAT_TABLE.data());
+
+    moveList = write_moves(moveList, static_cast<uint32_t>(to_bb >> 0),
+                           _mm512_or_si512(_mm512_load_si512(table + 0), fromVec));
+    moveList = write_moves(moveList, static_cast<uint32_t>(to_bb >> 32),
+                           _mm512_or_si512(_mm512_load_si512(table + 1), fromVec));
+
+    return moveList;
+}
+
+#else
 
 template<Direction offset>
 inline Move* splat_pawn_moves(Move* moveList, Bitboard to_bb) {
@@ -43,6 +102,7 @@ inline Move* splat_moves(Move* moveList, Square from, Bitboard to_bb) {
     return moveList;
 }
 
+#endif
 
 template<GenType Type, Direction D, bool Enemy>
 Move* make_promotions(Move* moveList, [[maybe_unused]] Square to) {
@@ -247,3 +307,5 @@ Move* generate<LEGAL>(const Position& pos, Move* moveList) {
 
     return moveList;
 }
+
+}  // namespace Stockfish

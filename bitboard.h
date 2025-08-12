@@ -29,6 +29,8 @@
 
 #include "types.h"
 
+namespace Stockfish {
+
 namespace Bitboards {
 
 void        init();
@@ -66,12 +68,24 @@ extern Bitboard PseudoAttacks[PIECE_TYPE_NB][SQUARE_NB];
 struct Magic {
     Bitboard  mask;
     Bitboard* attacks;
+#ifndef USE_PEXT
     Bitboard magic;
     unsigned shift;
+#endif
 
     // Compute the attack's index using the 'magic bitboards' approach
     unsigned index(Bitboard occupied) const {
-        return unsigned(((occupied & mask) * magic) >> shift);
+
+#ifdef USE_PEXT
+        return unsigned(pext(occupied, mask));
+#else
+        if (Is64Bit)
+            return unsigned(((occupied & mask) * magic) >> shift);
+
+        unsigned lo = unsigned(occupied) & unsigned(mask);
+        unsigned hi = unsigned(occupied >> 32) & unsigned(mask >> 32);
+        return (lo * unsigned(magic) ^ hi * unsigned(magic >> 32)) >> shift;
+#endif
     }
 
     Bitboard attacks_bb(Bitboard occupied) const { return attacks[index(occupied)]; }
@@ -241,19 +255,92 @@ inline Bitboard attacks_bb(PieceType pt, Square s, Bitboard occupied) {
 
 // Counts the number of non-zero bits in a bitboard.
 inline int popcount(Bitboard b) {
+
+#ifndef USE_POPCNT
+
+    std::uint16_t indices[4];
+    std::memcpy(indices, &b, sizeof(b));
+    return PopCnt16[indices[0]] + PopCnt16[indices[1]] + PopCnt16[indices[2]]
+         + PopCnt16[indices[3]];
+
+#elif defined(_MSC_VER)
+
+    return int(_mm_popcnt_u64(b));
+
+#else  // Assumed gcc or compatible compiler
+
     return __builtin_popcountll(b);
+
+#endif
 }
 
 // Returns the least significant bit in a non-zero bitboard.
 inline Square lsb(Bitboard b) {
     assert(b);
+
+#if defined(__GNUC__)  // GCC, Clang, ICX
+
     return Square(__builtin_ctzll(b));
+
+#elif defined(_MSC_VER)
+    #ifdef _WIN64  // MSVC, WIN64
+
+    unsigned long idx;
+    _BitScanForward64(&idx, b);
+    return Square(idx);
+
+    #else  // MSVC, WIN32
+    unsigned long idx;
+
+    if (b & 0xffffffff)
+    {
+        _BitScanForward(&idx, int32_t(b));
+        return Square(idx);
+    }
+    else
+    {
+        _BitScanForward(&idx, int32_t(b >> 32));
+        return Square(idx + 32);
+    }
+    #endif
+#else  // Compiler is neither GCC nor MSVC compatible
+    #error "Compiler not supported."
+#endif
 }
 
 // Returns the most significant bit in a non-zero bitboard.
 inline Square msb(Bitboard b) {
     assert(b);
+
+#if defined(__GNUC__)  // GCC, Clang, ICX
+
     return Square(63 ^ __builtin_clzll(b));
+
+#elif defined(_MSC_VER)
+    #ifdef _WIN64  // MSVC, WIN64
+
+    unsigned long idx;
+    _BitScanReverse64(&idx, b);
+    return Square(idx);
+
+    #else  // MSVC, WIN32
+
+    unsigned long idx;
+
+    if (b >> 32)
+    {
+        _BitScanReverse(&idx, int32_t(b >> 32));
+        return Square(idx + 32);
+    }
+    else
+    {
+        _BitScanReverse(&idx, int32_t(b));
+        return Square(idx);
+    }
+    #endif
+#else  // Compiler is neither GCC nor MSVC compatible
+    #error "Compiler not supported."
+#endif
 }
 
 // Returns the bitboard of the least significant
@@ -270,5 +357,7 @@ inline Square pop_lsb(Bitboard& b) {
     b &= b - 1;
     return s;
 }
+
+}  // namespace Stockfish
 
 #endif  // #ifndef BITBOARD_H_INCLUDED

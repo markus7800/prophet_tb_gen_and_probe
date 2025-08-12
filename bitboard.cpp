@@ -22,6 +22,10 @@
 #include <bitset>
 #include <initializer_list>
 
+#include "misc.h"
+
+namespace Stockfish {
+
 uint8_t PopCnt16[1 << 16];
 uint8_t SquareDistance[SQUARE_NB][SQUARE_NB];
 
@@ -138,12 +142,14 @@ Bitboard sliding_attack(PieceType pt, Square sq, Bitboard occupied) {
 // the so called "fancy" approach.
 void init_magics(PieceType pt, Bitboard table[], Magic magics[][2]) {
 
+#ifndef USE_PEXT
     // Optimal PRNG seeds to pick the correct magics in the shortest time
     int seeds[][RANK_NB] = {{8977, 44560, 54343, 38998, 5731, 95205, 104912, 17020},
                             {728, 10316, 55013, 32803, 12281, 15100, 16645, 255}};
 
     Bitboard occupancy[4096];
     int      epoch[4096] = {}, cnt = 0;
+#endif
     Bitboard reference[4096];
     int      size = 0;
 
@@ -159,9 +165,9 @@ void init_magics(PieceType pt, Bitboard table[], Magic magics[][2]) {
         // apply to the 64 or 32 bits word to get the index.
         Magic& m = magics[s][pt - BISHOP];
         m.mask   = sliding_attack(pt, s, 0) & ~edges;
-
-        m.shift = 64 - popcount(m.mask);
-
+#ifndef USE_PEXT
+        m.shift = (Is64Bit ? 64 : 32) - popcount(m.mask);
+#endif
         // Set the offset for the attacks table of the square. We have individual
         // table sizes for each square with "Fancy Magic Bitboards".
         m.attacks = s == SQ_A1 ? table : magics[s - 1][pt - BISHOP].attacks + size;
@@ -172,17 +178,20 @@ void init_magics(PieceType pt, Bitboard table[], Magic magics[][2]) {
         Bitboard b = 0;
         do
         {
+#ifndef USE_PEXT
             occupancy[size] = b;
+#endif
             reference[size] = sliding_attack(pt, s, b);
 
-            // if (HasPext)
-            //     m.attacks[pext(b, m.mask)] = reference[size];
+            if (HasPext)
+                m.attacks[pext(b, m.mask)] = reference[size];
 
             size++;
             b = (b - m.mask) & m.mask;
         } while (b);
 
-        PRNG rng(seeds[1][rank_of(s)]);
+#ifndef USE_PEXT
+        PRNG rng(seeds[Is64Bit][rank_of(s)]);
 
         // Find a magic for square 's' picking up an (almost) random number
         // until we find the one that passes the verification test.
@@ -210,6 +219,9 @@ void init_magics(PieceType pt, Bitboard table[], Magic magics[][2]) {
                     break;
             }
         }
+#endif
     }
 }
 }
+
+}  // namespace Stockfish
