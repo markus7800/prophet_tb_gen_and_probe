@@ -67,7 +67,9 @@ inline uint64_t perft(const std::string& fen, Depth depth, bool isChess960) {
     TimePoint t0 = now();
     uint64_t res = perft<true>(p, depth);
     TimePoint t1 = now();
-    std::cout << (double) (t1-t0) / 1000.0 << "s" << std::endl;
+    double elapsed_secs = (double) (t1-t0) / 1000.0;
+    double mnps = res / elapsed_secs / 1000000.0;
+    std::cout << elapsed_secs << "s, " << mnps << " MNPS" << std::endl;
     return res;
 }
 }

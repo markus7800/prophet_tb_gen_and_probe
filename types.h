@@ -310,6 +310,9 @@ constexpr Square  operator-(Square s, Direction d) { return Square(int(s) - int(
 constexpr Square& operator+=(Square& s, Direction d) { return s = s + d; }
 constexpr Square& operator-=(Square& s, Direction d) { return s = s - d; }
 
+
+// constexpr Square operator^(Square s, int8_t d) { return Square(int(s) ^ d); }
+
 // Toggle color
 constexpr Color operator~(Color c) { return Color(c ^ BLACK); }
 
