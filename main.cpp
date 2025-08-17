@@ -28,62 +28,6 @@ void enumerate_kkp() {
     
 }
 
-void check_transforms() {
-
-    int kkx_index[64][64][3];
-    int count = 0;
-
-    for (Square ktm_sq = SQ_A1; ktm_sq <= SQ_H8; ++ktm_sq) {
-        int8_t horizontal_flip = file_of(ktm_sq) > FILE_D ? 7 : 0;
-        int8_t vertical_flip = rank_of(ktm_sq) > RANK_4 ? 56 : 0;
-        int8_t flip = horizontal_flip ^ vertical_flip;
-
-        int8_t new_ktm_sq = int8_t(ktm_sq) ^ flip;
-
-        if (file_of((Square) new_ktm_sq) > FILE_D) {
-            std::cout << "Square not in correct file " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) new_ktm_sq) << std::endl;
-        }
-        if (rank_of((Square) new_ktm_sq) > RANK_4) {
-            std::cout << "Square not in correct rank " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) new_ktm_sq) << std::endl;
-        }
-
-
-        for (Square kntm_sq = SQ_A1; kntm_sq <= SQ_H8; ++kntm_sq) {
-            int8_t new_kntm_sq = int8_t(kntm_sq) ^ flip;
-            int8_t swap = 0;
-            if (int8_t(rank_of((Square) new_ktm_sq)) > int8_t(file_of((Square) new_ktm_sq))) {
-                swap = 3;
-            }
-            else if (int8_t(rank_of((Square) new_ktm_sq)) == int8_t(file_of((Square) new_ktm_sq))) {
-                if (int8_t(rank_of((Square) new_kntm_sq)) > int8_t(file_of((Square) new_kntm_sq))) {
-                    swap = 3;
-                }
-            }
-            new_ktm_sq = ((new_ktm_sq >> swap) | (new_ktm_sq << swap)) & 63;
-            new_kntm_sq = ((new_kntm_sq >> swap) | (new_kntm_sq << swap)) & 63;
-
-            
-            bool found = false;
-            for (int i = 0; i < N_KKX; i++) {
-                if (KKX_KTM_SQ[i] == new_ktm_sq && KKX_KNTM_SQ[i] == new_kntm_sq) {
-                    kkx_index[ktm_sq][kntm_sq][0] = i;
-                    found = true;
-                }
-            }
-            if (!found) {
-                kkx_index[ktm_sq][kntm_sq][0] = -1;
-            } else {
-                count++;
-            }
-
-            kkx_index[ktm_sq][kntm_sq][1] = flip;
-            kkx_index[ktm_sq][kntm_sq][2] = swap;
-        }
-    }
-    std::cout << "count: " << count << std::endl; // 3612
-
-
-}
 
 }
 
@@ -119,28 +63,44 @@ int main() {
     // check_transforms();
     // Stockfish::enumerate_kkp();
 
+    init_kkx_index();
+
     std::vector<PieceType> stm_pieces = {};
-    std::vector<PieceType> sntm_pieces = {ROOK};
+    std::vector<PieceType> sntm_pieces = {QUEEN, ROOK, BISHOP, KNIGHT};
     KKXIndex index = KKXIndex(stm_pieces, sntm_pieces);
     std::cout << index.num_positions() << std::endl;
 
     uint64_t count = 0;
+    uint64_t matches = 0;
+    EGPosition pos;
+
+    TimePoint t0 = now();
     for (uint64_t ix = 0; ix < index.num_positions(); ix++) {
-        EGPosition pos;
+
         std::memset(&pos, 0, sizeof(EGPosition));
         index.pos_at_ix(pos, ix);
         if (pos.is_legal_checkmate()) {
             count++;
-            std::cout << pos << std::endl;
+            // std::cout << pos << std::endl;
         }
         // std::cout << pos << std::endl;
         // count++;
-        // if (count == 3) {
-        //     break;
-        // }
+
+        uint64_t ix2 = index.ix_from_pos(pos);
+        matches += (ix == ix2);
+        if (ix != ix2) {
+            std::cout << ix << " vs " << ix2 << std::endl;
+            break;
+        }
+        
+        // if (count == 5) { break; }
     }
+
+    std::cout << "Matches count: " << matches << std::endl;
     std::cout << "Checkmate count: " << count << std::endl;
 
+    TimePoint t1 = now();
+    std::cout << "Finished in " << (t1-t0) / 1000.0 << std::endl;
 
     return 0;
 }

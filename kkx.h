@@ -89,4 +89,66 @@ int8_t KKX_KNTM_SQ[N_KKX] = {
  0, 1, 2, 3, 4, 5, 6, 7, 9,10,11,12,13,14,15,21,22,23,29,30,31,37,38,39,45,46,47,54,55,63,
 };
 
+struct KKX_IX_T {
+    int16_t ix;
+    int8_t flip;
+    int8_t swap;
+};
+
+KKX_IX_T KKX_IX_T_TABLE[64][64];
+
+void init_kkx_index() {
+
+    // int count = 0;
+
+    for (Square ktm_sq = SQ_A1; ktm_sq <= SQ_H8; ++ktm_sq) {
+        int8_t horizontal_flip = file_of(ktm_sq) > FILE_D ? 7 : 0;
+        int8_t vertical_flip = rank_of(ktm_sq) > RANK_4 ? 56 : 0;
+        int8_t flip = horizontal_flip ^ vertical_flip;
+
+        int8_t new_ktm_sq = int8_t(ktm_sq) ^ flip;
+
+        // if (file_of((Square) new_ktm_sq) > FILE_D) {
+        //     std::cout << "Square not in correct file " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) new_ktm_sq) << std::endl;
+        // }
+        // if (rank_of((Square) new_ktm_sq) > RANK_4) {
+        //     std::cout << "Square not in correct rank " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) new_ktm_sq) << std::endl;
+        // }
+
+
+        for (Square kntm_sq = SQ_A1; kntm_sq <= SQ_H8; ++kntm_sq) {
+            int8_t new_kntm_sq = int8_t(kntm_sq) ^ flip;
+            int8_t swap = 0;
+            if (int8_t(rank_of((Square) new_ktm_sq)) > int8_t(file_of((Square) new_ktm_sq))) {
+                swap = 3;
+            }
+            else if (int8_t(rank_of((Square) new_ktm_sq)) == int8_t(file_of((Square) new_ktm_sq))) {
+                if (int8_t(rank_of((Square) new_kntm_sq)) > int8_t(file_of((Square) new_kntm_sq))) {
+                    swap = 3;
+                }
+            }
+            new_ktm_sq = ((new_ktm_sq >> swap) | (new_ktm_sq << swap)) & 63;
+            new_kntm_sq = ((new_kntm_sq >> swap) | (new_kntm_sq << swap)) & 63;
+
+            
+            // bool found = false;
+            int16_t ix = -1;
+            for (int i = 0; i < N_KKX; i++) {
+                if (KKX_KTM_SQ[i] == new_ktm_sq && KKX_KNTM_SQ[i] == new_kntm_sq) {
+                    ix = i;
+                    // found = true;
+                }
+            }
+            // if (found) {
+            //     count++;
+            // }
+
+            KKX_IX_T_TABLE[ktm_sq][kntm_sq] = {ix, flip, swap};
+
+        }
+    }
+    // std::cout << "count: " << count << std::endl; // 3612
+
+}
+
 #endif
