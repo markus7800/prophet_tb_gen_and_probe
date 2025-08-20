@@ -225,7 +225,7 @@ bool attackers_to_exist_after_moving_piece(Square s, Color c, Bitboard byTypeBB[
     return ((attacks_bb<ROOK>(s) & (byTypeBB[ROOK] | byTypeBB[QUEEN]) & byColorBB[c])
             && (attacks_bb<ROOK>(s, occupied) & (byTypeBB[ROOK] | byTypeBB[QUEEN]) & byColorBB[c]))
         || ((attacks_bb<BISHOP>(s) & (byTypeBB[BISHOP] | byTypeBB[QUEEN]) & byColorBB[c])
-            && (attacks_bb<BISHOP>(s, occupied) & (byTypeBB[ROOK] | byTypeBB[QUEEN]) & byColorBB[c]))
+            && (attacks_bb<BISHOP>(s, occupied) & (byTypeBB[BISHOP] | byTypeBB[QUEEN]) & byColorBB[c]))
         || (((attacks_bb<PAWN>(s, ~c) & byTypeBB[PAWN]) | (attacks_bb<KNIGHT>(s) & byTypeBB[KNIGHT])
              | (attacks_bb<KING>(s) & byTypeBB[KING]))
             & byColorBB[c]);
@@ -259,6 +259,7 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList) {
         Square from = cur->from_sq();
         Square to = cur->to_sq();
         PieceType pt = type_of(pos.piece_on(from));
+
         Bitboard fromTo = from | to;
         byTypeBB[ALL_PIECES] ^= fromTo;
         byTypeBB[pt] ^= fromTo;
@@ -272,10 +273,11 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList) {
         } else {
             ++cur;
         }
-        Bitboard toFrom = to | from;
-        byTypeBB[ALL_PIECES] ^= toFrom;;
-        byTypeBB[pt] ^= toFrom;
-        byColorBB[us] ^= toFrom;
+
+        // Bitboard toFrom = to | from;
+        byTypeBB[ALL_PIECES] ^= fromTo;;
+        byTypeBB[pt] ^= fromTo;
+        byColorBB[us] ^= fromTo;
     }
     return moveList;
 }

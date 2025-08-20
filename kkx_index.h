@@ -110,14 +110,58 @@ void KKXIndex::pos_at_ix(EGPosition &pos, uint64_t ix) const {
         s--;
     }
 }
+
+inline Square transform(const Square sq, KKX_IX_T kkx_ix_tr) {
+    int8_t sq_ix = int8_t(sq) ^ kkx_ix_tr.flip;
+    return Square(((sq_ix >> kkx_ix_tr.swap) | (sq_ix << kkx_ix_tr.swap)) & 63);
+}
+
+
+
+void print_transform(const EGPosition &pos) {
+    Color stm = pos.side_to_move();
+
+    Square orig_ktm_sq = pos.square<KING>(stm);
+    Square orig_kntm_sq = pos.square<KING>(~stm);
+
+    std::cout << "original" << std::endl;
+    std::cout << pos << std::endl;
+
+    KKX_IX_T kkx_ix_tr = get_kkx_ix_t(orig_ktm_sq, orig_kntm_sq);
+
+    EGPosition pos2;
+    std::memset(&pos2, 0, sizeof(EGPosition));
+    for (PieceType pt = PAWN; pt <= KING; ++pt) {
+        for (Color c: {WHITE, BLACK}) {
+            Bitboard bb = pos.pieces(c, pt);
+            while (bb) {
+                Square sq = pop_lsb(bb);
+                pos2.put_piece(make_piece(c,pt), transform(sq, kkx_ix_tr));
+            }
+        }
+    }
+    pos2.set_side_to_move(pos.side_to_move());
+    std::cout << "transformed " << int(kkx_ix_tr.flip) << " " << int(kkx_ix_tr.swap) << std::endl;
+    std::cout << pos2 << std::endl;
+}
+
 uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
     Color stm = pos.side_to_move();
 
+    Square orig_ktm_sq = pos.square<KING>(stm);
+    Square orig_kntm_sq = pos.square<KING>(~stm);
+
+    KKX_IX_T kkx_ix_tr = get_kkx_ix_t(orig_ktm_sq, orig_kntm_sq);
+
+    Square ktm_sq = transform(orig_ktm_sq, kkx_ix_tr);
+    Square kntm_sq = transform(orig_kntm_sq, kkx_ix_tr);
+    // printf("kkx_ix_tr: %d %d %s->%s %s->%s\n", kkx_ix_tr.flip, kkx_ix_tr.swap,
+    //     square_to_uci(orig_ktm_sq).c_str(), square_to_uci(ktm_sq).c_str(),
+    //     square_to_uci(orig_kntm_sq).c_str(), square_to_uci(kntm_sq).c_str()
+    // );
+
+
     Square occupied_sqs[6];
-
-    Square ktm_sq = pos.square<KING>(stm);
-    Square kntm_sq = pos.square<KING>(~stm);
-
 
     if (ktm_sq < kntm_sq) {
         occupied_sqs[0] = ktm_sq;
@@ -128,7 +172,6 @@ uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
         occupied_sqs[1] = ktm_sq;
     }
     
-    KKX_IX_T kkx_ix_tr = KKX_IX_T_TABLE[ktm_sq][kntm_sq];
     
     uint64_t kkx = kkx_ix_tr.ix;
 
@@ -142,12 +185,11 @@ uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
 
     for (Color c: {~stm, stm}) {
         for (PieceType p: {QUEEN, ROOK, BISHOP, KNIGHT}) {
-            Bitboard pieceBB = pos.pieces(~c, p);
+            Bitboard pieceBB = pos.pieces(c, p);
             if (pieceBB) {
                 // TODO: transform square
                 Square orig_sq = lsb(pieceBB);
-                int8_t orig_sq_ix = int8_t(orig_sq) ^ kkx_ix_tr.flip;
-                orig_sq = Square(((orig_sq_ix >> kkx_ix_tr.swap) | (orig_sq_ix << kkx_ix_tr.swap)) & 63);
+                orig_sq = transform(orig_sq, kkx_ix_tr);
 
 
                 Square sq = orig_sq;
@@ -172,7 +214,7 @@ uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
                 // std::cout << "initial p:" << PieceToChar[p] << ", sq:" << int(orig_sq) << " insert at " << k << std::endl;
                 // std::cout << "final ix:" << int(sq) << std::endl;
 
-                ix += (sq * multiplier);
+                ix += ((uint64_t) sq) * multiplier;
                 multiplier *= s;
 
                 s--;

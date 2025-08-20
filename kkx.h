@@ -99,31 +99,37 @@ KKX_IX_T KKX_IX_T_TABLE[64][64];
 
 void init_kkx_index() {
 
-    // int count = 0;
+    int count = 0;
 
     for (Square ktm_sq = SQ_A1; ktm_sq <= SQ_H8; ++ktm_sq) {
         int8_t horizontal_flip = file_of(ktm_sq) > FILE_D ? 7 : 0;
         int8_t vertical_flip = rank_of(ktm_sq) > RANK_4 ? 56 : 0;
         int8_t flip = horizontal_flip ^ vertical_flip;
 
-        int8_t new_ktm_sq = int8_t(ktm_sq) ^ flip;
+        int8_t _new_ktm_sq = int8_t(ktm_sq) ^ flip;
 
-        if (file_of((Square) new_ktm_sq) > FILE_D) {
-            std::cout << "Square not in correct file " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) new_ktm_sq) << std::endl;
+        // check if king is in correct octant
+        if (file_of((Square) _new_ktm_sq) > FILE_D) {
+            std::cout << "Square not in correct file " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) _new_ktm_sq) << std::endl;
         }
-        if (rank_of((Square) new_ktm_sq) > RANK_4) {
-            std::cout << "Square not in correct rank " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) new_ktm_sq) << std::endl;
+        if (rank_of((Square) _new_ktm_sq) > RANK_4) {
+            std::cout << "Square not in correct rank " << square_to_uci(ktm_sq)<< " - " << square_to_uci((Square) _new_ktm_sq) << std::endl;
         }
 
 
         for (Square kntm_sq = SQ_A1; kntm_sq <= SQ_H8; ++kntm_sq) {
+            int8_t new_ktm_sq = int8_t(ktm_sq) ^ flip;
             int8_t new_kntm_sq = int8_t(kntm_sq) ^ flip;
             int8_t swap = 0;
+            // std::cout << int(ktm_sq) << " " << square_to_uci((Square) ktm_sq) << " flip:" << int(flip) << " - " << int(new_ktm_sq) << " " << square_to_uci((Square) new_ktm_sq) << " " << square_to_uci((Square) new_kntm_sq) << " r:" << int(rank_of((Square) new_ktm_sq)) << " f:" <<  int(file_of((Square) new_ktm_sq)) << std::endl;
             if (int8_t(rank_of((Square) new_ktm_sq)) > int8_t(file_of((Square) new_ktm_sq))) {
+                // stm king is not in lower triangle a1 - d1 - d4
                 swap = 3;
             }
             else if (int8_t(rank_of((Square) new_ktm_sq)) == int8_t(file_of((Square) new_ktm_sq))) {
+                // stm king is on diagonal a1 b2 c3 d4
                 if (int8_t(rank_of((Square) new_kntm_sq)) > int8_t(file_of((Square) new_kntm_sq))) {
+                    // for sntm king to be on lower triangle a1 - h1 - h8
                     swap = 3;
                 }
             }
@@ -131,24 +137,33 @@ void init_kkx_index() {
             new_kntm_sq = ((new_kntm_sq >> swap) | (new_kntm_sq << swap)) & 63;
 
             
-            // bool found = false;
+            bool found = false;
             int16_t ix = -1;
             for (int i = 0; i < N_KKX; i++) {
                 if (KKX_KTM_SQ[i] == new_ktm_sq && KKX_KNTM_SQ[i] == new_kntm_sq) {
                     ix = i;
-                    // found = true;
+                    found = true;
                 }
             }
-            // if (found) {
-            //     count++;
-            // }
-
+            if (found) {
+                count++;
+            }
+            printf("KKX_IX_T_TABLE[%d][%d] = (%d,%d,%d)\n", ktm_sq, kntm_sq, ix, flip, swap);
             KKX_IX_T_TABLE[ktm_sq][kntm_sq] = {ix, flip, swap};
 
         }
     }
-    // std::cout << "count: " << count << std::endl; // 3612
+    std::cout << "init_kkx_index count: " << count << std::endl; // 3612
+}
 
+inline KKX_IX_T get_kkx_ix_t(Square ktm, Square kntm) {
+    KKX_IX_T kkx_ix_tr = KKX_IX_T_TABLE[ktm][kntm];
+    if (kkx_ix_tr.ix == -1) {
+        printf("Tried to access KKX_IX_T_TABLE[%d][%d] = -1\n", ktm, kntm);
+        exit(1);
+    } else {
+        return kkx_ix_tr;
+    }
 }
 
 #endif

@@ -50,6 +50,8 @@ public:
 
     bool is_legal_checkmate() const;
 
+    bool is_equal(const EGPosition& pos) const;
+
 private:
         Piece      board[SQUARE_NB];
         Bitboard   byTypeBB[PIECE_TYPE_NB];
@@ -63,12 +65,26 @@ private:
         bool has_pawn_evasions(Square checkerSq, Bitboard pinned, Bitboard block) const;
 };
 
+bool EGPosition::is_equal(const EGPosition& pos) const {
+    for (int i = 0; i < SQUARE_NB; i++) {
+        if (board[i] != pos.board[i]) { return false; }
+    }
+    for (int i = 0; i < PIECE_TYPE_NB; i++) {
+        if (byTypeBB[i] != pos.byTypeBB[i]) { return false; }
+    }
+    for (int i = 0; i < COLOR_NB; i++) {
+        if (byColorBB[i] != pos.byColorBB[i]) { return false; }
+    }
+    if (sideToMove != pos.sideToMove) { return false; }
+    return true;
+}
+
 constexpr std::string_view PieceToChar(" PNBRQK  pnbrqk");
 
 // Returns an ASCII representation of the position
 std::ostream& operator<<(std::ostream& os, const EGPosition& pos) {
 
-    os << "\n +---+---+---+---+---+---+---+---+\n";
+    os << " +---+---+---+---+---+---+---+---+\n";
 
     for (Rank r = RANK_8; r >= RANK_1; --r)
     {
@@ -78,13 +94,15 @@ std::ostream& operator<<(std::ostream& os, const EGPosition& pos) {
         os << " | " << (1 + r) << "\n +---+---+---+---+---+---+---+---+\n";
     }
 
-    os << "   a   b   c   d   e   f   g   h\n" << "Checkers: ";
+    os << "   a   b   c   d   e   f   g   h";// << "Checkers: ";
+    os << "    STM: " << (pos.side_to_move() == WHITE ? "WHITE" : "BLACK") << "\n";
 
-    for (Bitboard b = pos.checkers(pos.side_to_move()); b;)
-        os << square_to_uci(pop_lsb(b)) << " ";
+    // for (Bitboard b = pos.checkers(pos.side_to_move()); b;)
+    //     os << square_to_uci(pop_lsb(b)) << " ";
 
     return os;
 }
+
 
 inline void EGPosition::put_piece(Piece pc, Square s) {
     board[s] = pc;
