@@ -111,6 +111,9 @@ void test_kkx_index() {
     }
 }
 
+inline int16_t WIN_IN(int16_t level) { return 1000 - level; }
+inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
+
 int main() {
     Stockfish::Bitboards::init();
     Stockfish::Position::init();
@@ -131,6 +134,14 @@ int main() {
     uint64_t count = 0;
     uint64_t matches = 0;
     EGPosition pos;
+
+
+    // std::memset(&pos, 0, sizeof(EGPosition));
+    // index.pos_at_ix(pos, 25454);
+    // std::cout << pos << std::endl;
+    // EGMoveList testMoveList = EGMoveList<FORWARD>(pos);
+    // std::cout << testMoveList.size() << std::endl;
+    // return 0;
 
     TimePoint t0 = now();
     for (uint64_t ix = 0; ix < index.num_positions(); ix++) {
@@ -157,7 +168,6 @@ int main() {
             break;
         }
         
-        // if (count == 5) { break; }
     }
 
     std::cout << "Matches count: " << matches << std::endl;
@@ -170,13 +180,13 @@ int main() {
     int16_t* TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
 
     // init
-    int16_t LEVEL = 1;
+    int16_t LEVEL = 0;
     uint64_t N_LEVEL_POS = 0;
     for (uint64_t ix = 0; ix < NPOS; ix++) {
         std::memset(&pos, 0, sizeof(EGPosition));
         index.pos_at_ix(pos, ix);
         if (pos.is_legal_checkmate()) {
-            TB[ix] = -LEVEL;
+            TB[ix] = LOSS_IN(LEVEL);
             N_LEVEL_POS++;
         }
     }
@@ -188,25 +198,32 @@ int main() {
         N_LEVEL_POS = 0;
         for (uint64_t ix = 0; ix < NPOS; ix++) {
             // for all checkmate in LEVEL-1
-            if (TB[ix] == -(LEVEL-1)) {
+            if (TB[ix] == LOSS_IN(LEVEL-1)) {
                 std::memset(&pos, 0, sizeof(EGPosition));
-                // std::cout << "POSITION:" << std::endl;
                 index.pos_at_ix(pos, ix);
+                // std::cout << "POSITION:" << std::endl;
                 // std::cout << pos << std::endl;
                 for (Move move : EGMoveList<REVERSE>(pos)) {
+                    // make reverse move and mark position as win in LEVEL
                     pos.move_piece(move.from_sq(), move.to_sq()); // non-capture
                     pos.flip_side_to_move();
                     uint64_t win_ix = index.ix_from_pos(pos);
                     // std::cout << "1." << move_to_uci(move, false) << " " << win_ix << std::endl;
-                    // make reverse move and mark position as win in LEVEL
                     // EGPosition pos2;
 
                     if (TB[win_ix] == 0) {
-                        TB[win_ix] = LEVEL;
+                        // EGMoveList moveList2 = EGMoveList<REVERSE>(pos);
+                        // if (moveList2.size() == 0) {
+                        //     // no move can lead to this position, e.g. stalemate
+                        //     std::cout << pos << "no reverse moves " << std::endl;
+                        //     continue;
+                        // }
+
+                        TB[win_ix] = WIN_IN(LEVEL);
+                        if (N_LEVEL_POS == 0) { std::cout << pos.fen() << std::endl; }
                         N_LEVEL_POS++;
 
-                        // std::cout << pos << std::endl;
-                        // std::cout << "Set level of " << win_ix << " to " << LEVEL << std::endl;
+                        // std::cout << pos << "set level of " << win_ix << " to " << LEVEL << std::endl;
                         // std::memset(&pos2, 0, sizeof(EGPosition));
                         // index.pos_at_ix(pos2, win_ix);
                         // std::cout << "vs reconstructed" << std::endl;
@@ -222,8 +239,7 @@ int main() {
                             uint64_t maybe_loss_ix = index.ix_from_pos(pos);
 
                             // std::cout << "2." << move_to_uci(move2, false) << " " << maybe_loss_ix << std::endl;
-                            // std::cout << "Set level of " << maybe_loss_ix << " to " << -(LEVEL+1) << std::endl;
-                            // std::cout << pos << std::endl;
+                            // std::cout << pos << "set level of " << maybe_loss_ix << " to " << -(LEVEL+1) << std::endl;
 
                             // std::memset(&pos2, 0, sizeof(EGPosition));
                             // index.pos_at_ix(pos2, maybe_loss_ix);
@@ -231,7 +247,7 @@ int main() {
                             // std::cout << pos2 << std::endl;
 
                             if (TB[maybe_loss_ix] == 0)
-                                TB[maybe_loss_ix] = -(LEVEL+1); // mark as potential loss in LEVEL+1
+                                TB[maybe_loss_ix] = LOSS_IN(LEVEL+1); // mark as potential loss in LEVEL+1
                             pos.move_piece(move2.to_sq(), move2.from_sq());
                             pos.flip_side_to_move();
                         }
@@ -247,39 +263,76 @@ int main() {
 
         N_LEVEL_POS = 0;
         for (uint64_t ix = 0; ix < NPOS; ix++) {
-            if (TB[ix] == -LEVEL) { // potential loss in LEVEL
+            if (TB[ix] == LOSS_IN(LEVEL)) { // potential loss in LEVEL
                 std::memset(&pos, 0, sizeof(EGPosition));
                 index.pos_at_ix(pos, ix);
                 // std::cout << pos << std::endl;
 
                 // check that all forward moves lead to checkmate in <= -(LEVEL-1)
-                int16_t max_val = -1000;
-                for (Move move : EGMoveList<FORWARD>(pos)) {
-                    if (move.to_sq() & pos.pieces()) {
-                        // capture
-                        max_val = std::max(max_val, (int16_t) 0);
-                        continue;
-                    }
+                EGMoveList moveList = EGMoveList<FORWARD>(pos);
+                int16_t max_val = LOSS_IN(0);
+                if (moveList.size() == 0) {
+                    max_val = 0; // has to be stalemate, but should never happen since pos was found by reverse move
+                    std::cout << "stalemate?!:" << pos << ix << std::endl;
+                } else {
+                    for (Move move : moveList) {
+                        if (move.to_sq() & pos.pieces()) {
+                            // capture
+                            max_val = std::max(max_val, (int16_t) 0);
+                            break;
+                        }
 
-                    pos.move_piece(move.from_sq(), move.to_sq());
-                    uint64_t fwd_ix = index.ix_from_pos(pos);
-                    int16_t val = TB[fwd_ix];
-                    max_val = std::max(max_val, val);
-                    pos.move_piece(move.to_sq(), move.from_sq());
+                        pos.move_piece(move.from_sq(), move.to_sq());
+                        pos.flip_side_to_move();
+
+                        uint64_t fwd_ix = index.ix_from_pos(pos);
+                        int16_t val = TB[fwd_ix];
+                        // std::cout << move_to_uci(move, false) << " " << val << std::endl;
+                        if (val != LOSS_IN(LEVEL) && val != WIN_IN(LEVEL) ) {
+                            max_val = std::max(max_val, (int16_t) -val);
+                        } else {
+                            max_val = std::max(max_val, (int16_t) 0);
+                        }
+                        pos.move_piece(move.to_sq(), move.from_sq());
+                        pos.flip_side_to_move();
+                    }
                 }
-                if (max_val > -(LEVEL - 1)) {
+                if (max_val >= 0) {
                     TB[ix] = 0;
                 } else {
+                    if (N_LEVEL_POS == 0) { std::cout << pos.fen() << std::endl; }
                     N_LEVEL_POS++;
-                    // assert max_val == -(LEVEL - 1)
-                    // TB[ix] = LEVEL
+                    if (max_val != LOSS_IN(LEVEL - 1)) {
+                        std::cout << "INCONSISTENT ERR: " << pos << std::endl;
+                        std::cout << pos.fen() << std::endl;
+                        std::cout << max_val << " vs " << LOSS_IN(LEVEL - 1) << std::endl; 
+                        for (Move move : moveList) {
+                            if (move.to_sq() & pos.pieces()) {
+                                // capture
+                                std::cout << move_to_uci(move, false) << " capture" << std::endl;
+                                continue;
+                            }
+
+                            pos.move_piece(move.from_sq(), move.to_sq());
+                            pos.flip_side_to_move();
+
+                            uint64_t fwd_ix = index.ix_from_pos(pos);
+                            int16_t val = TB[fwd_ix];
+                            std::cout << move_to_uci(move, false) << " " << val << std::endl;
+
+                            pos.move_piece(move.to_sq(), move.from_sq());
+                            pos.flip_side_to_move();
+                        }
+                        exit(1);
+                    }
+                    TB[ix] = LOSS_IN(LEVEL);
                 }
             }
         }
         std::cout << N_LEVEL_POS << " positions at level " << LEVEL << std::endl;
 
         iteration_counter++;
-        if (iteration_counter >= 12) { break; }
+        // if (iteration_counter >= 1) { break; }
         
     }
 

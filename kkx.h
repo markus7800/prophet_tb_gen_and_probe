@@ -148,7 +148,7 @@ void init_kkx_index() {
             if (found) {
                 count++;
             }
-            printf("KKX_IX_T_TABLE[%d][%d] = (%d,%d,%d)\n", ktm_sq, kntm_sq, ix, flip, swap);
+            // printf("KKX_IX_T_TABLE[%d][%d] = (%d,%d,%d)\n", ktm_sq, kntm_sq, ix, flip, swap);
             KKX_IX_T_TABLE[ktm_sq][kntm_sq] = {ix, flip, swap};
 
         }

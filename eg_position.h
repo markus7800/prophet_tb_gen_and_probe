@@ -33,6 +33,7 @@ public:
     template<typename... PieceTypes>
     Bitboard pieces(Color c, PieceTypes... pts) const;
     Piece    piece_on(Square s) const;
+    bool empty(Square s) const;
 
     template<PieceType Pt>
     Square square(Color c) const;
@@ -51,6 +52,8 @@ public:
     bool is_legal_checkmate() const;
 
     bool is_equal(const EGPosition& pos) const;
+
+    std::string fen() const;
 
 private:
         Piece      board[SQUARE_NB];
@@ -103,6 +106,39 @@ std::ostream& operator<<(std::ostream& os, const EGPosition& pos) {
     return os;
 }
 
+std::string EGPosition::fen() const {
+
+    int                emptyCnt;
+    std::ostringstream ss;
+
+    for (Rank r = RANK_8; r >= RANK_1; --r)
+    {
+        for (File f = FILE_A; f <= FILE_H; ++f)
+        {
+            for (emptyCnt = 0; f <= FILE_H && empty(make_square(f, r)); ++f)
+                ++emptyCnt;
+
+            if (emptyCnt)
+                ss << emptyCnt;
+
+            if (f <= FILE_H)
+                ss << PieceToChar[piece_on(make_square(f, r))];
+        }
+
+        if (r > RANK_1)
+            ss << '/';
+    }
+
+    ss << (sideToMove == WHITE ? " w " : " b ");
+
+    ss << '-';
+
+    // ss << (ep_square() == SQ_NONE ? " - " : " " + square_to_uci(ep_square()) + " ")
+    //    << st->rule50 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+
+    return ss.str();
+}
+
 
 inline void EGPosition::put_piece(Piece pc, Square s) {
     board[s] = pc;
@@ -138,6 +174,8 @@ inline Piece EGPosition::piece_on(Square s) const {
     assert(is_ok(s));
     return board[s];
 }
+inline bool EGPosition::empty(Square s) const { return piece_on(s) == NO_PIECE; }
+
 
 inline Bitboard EGPosition::pieces() const { return byTypeBB[ALL_PIECES]; }
 

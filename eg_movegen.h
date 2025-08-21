@@ -128,11 +128,10 @@ Move* generate_all_fwd(const EGPosition& pos, Move* moveList, Bitboard checkers)
     static_assert(Type == FWD_EVASIONS || Type == FWD_NON_EVASIONS);
 
     const Square ksq = pos.square<KING>(Us);
-    Bitboard     target;
 
     // Skip generating non-king moves when in double check
     if (Type != FWD_EVASIONS || !more_than_one(checkers)) {
-        target = Type == FWD_EVASIONS ? between_bb(ksq, lsb(checkers)): pos.pieces(Us);
+        Bitboard target = Type == FWD_EVASIONS ? between_bb(ksq, lsb(checkers)): ~pos.pieces(Us);
 
         moveList = generate_pawn_moves<Us, Type>(pos, moveList, target, checkers);
         moveList = generate_moves<Us, KNIGHT>(pos, moveList, target);
@@ -141,7 +140,7 @@ Move* generate_all_fwd(const EGPosition& pos, Move* moveList, Bitboard checkers)
         moveList = generate_moves<Us, QUEEN>(pos, moveList, target);
     }
 
-    Bitboard b = attacks_bb<KING>(ksq) & (Type == FWD_EVASIONS ? ~pos.pieces(Us) : target);
+    Bitboard b = attacks_bb<KING>(ksq) & ~pos.pieces(Us);
     moveList = splat_moves(moveList, ksq, b);
 
     return moveList;
