@@ -102,7 +102,7 @@ std::ostream& operator<<(std::ostream& os, const EGPosition& pos) {
 
     os << "   a   b   c   d   e   f   g   h";// << "Checkers: ";
     os << "    STM: " << (pos.side_to_move() == WHITE ? "WHITE" : "BLACK") << "\n";
-
+    // os << Bitboards::pretty(pos.pieces()) << "\n";
     // for (Bitboard b = pos.checkers(pos.side_to_move()); b;)
     //     os << square_to_uci(pop_lsb(b)) << " ";
 
@@ -335,11 +335,13 @@ void EGPosition::flip_diagonally() {
     for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
         if (rank_of(sq) > file_of(sq)) { continue; }
         Square flipped_sq = Square((sq >> 3) | (sq << 3) & 63);
+        // std::cout << int(sq) << " -> " << int(flipped_sq) << std::endl;
         Piece tmp = board[sq];
         board[sq] = board[flipped_sq];
         board[flipped_sq] = tmp;
     }
-    for (PieceType pt = PAWN; pt <= KING; ++pt) {
+    // exit(1);
+    for (PieceType pt = ALL_PIECES; pt <= KING; ++pt) {
         Bitboard x = byTypeBB[pt];
         Bitboard t;
         const uint64_t k1 = 0x5500550055005500;

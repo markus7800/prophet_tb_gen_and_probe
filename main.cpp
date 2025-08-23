@@ -126,6 +126,7 @@ void test_kkx_index() {
 
 inline int16_t WIN_IN(int16_t level) { return 1000 - level; }
 inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
+#define MAYBELOSS -1001
 
 int16_t ab(EGPosition &pos, int16_t alpha, int16_t beta, int ply) {
     if (ply == 10) {
@@ -229,6 +230,63 @@ void check_consistency(EGPosition &pos, KKXIndex &index, int16_t* TB, KKXIndex &
     }
 }
 
+
+void add_win_and_maybe_losses(EGPosition &pos, int16_t LEVEL, KKXIndex index, int16_t* TB, KKXIndex index2, int16_t* TB2, uint64_t* N_LEVEL_POS) {
+    uint64_t win_ix = index2.ix_from_pos(pos);
+    
+    if (TB2[win_ix] == 0) {
+
+        TB2[win_ix] = WIN_IN(LEVEL);
+        if (*N_LEVEL_POS == 0) { std::cout << pos << pos.fen() << ", ix: " << win_ix << std::endl; }
+        (*N_LEVEL_POS)++;
+        // return ;
+
+        for (Move move2 : EGMoveList<REVERSE>(pos)) {
+            pos.move_piece(move2.from_sq(), move2.to_sq());
+            pos.flip_side_to_move();
+
+            uint64_t maybe_loss_ix = index.ix_from_pos(pos);
+
+            Square wk = pos.square<KING>(WHITE);
+            Square bk = pos.square<KING>(BLACK);
+            if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
+                pos.flip_diagonally();
+                uint64_t flipped_maybe_loss_ix = index.ix_from_pos(pos);
+                if (TB[flipped_maybe_loss_ix] == 0)
+                    TB[flipped_maybe_loss_ix] = MAYBELOSS; // mark as potential loss in LEVEL+1
+                pos.flip_diagonally();
+            }
+
+            if (TB[maybe_loss_ix] == 0)
+                TB[maybe_loss_ix] = MAYBELOSS; // mark as potential loss in LEVEL+1
+            
+            pos.move_piece(move2.to_sq(), move2.from_sq());
+            pos.flip_side_to_move();
+        }
+    }
+}
+
+void add_wins(EGPosition &pos, int16_t LEVEL, KKXIndex index, int16_t* TB, KKXIndex index2, int16_t* TB2, uint64_t* N_LEVEL_POS) {
+    for (Move move : EGMoveList<REVERSE>(pos)) {
+        // make reverse move and mark position as win in LEVEL
+        pos.move_piece(move.from_sq(), move.to_sq()); // non-capture
+        pos.flip_side_to_move();
+
+        add_win_and_maybe_losses(pos, LEVEL, index, TB, index2, TB2, N_LEVEL_POS);
+        
+        Square wk = pos.square<KING>(WHITE);
+        Square bk = pos.square<KING>(BLACK);
+        if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
+            pos.flip_diagonally();
+            add_win_and_maybe_losses(pos, LEVEL, index, TB, index2, TB2, N_LEVEL_POS);
+            pos.flip_diagonally();
+        }
+
+        pos.move_piece(move.to_sq(), move.from_sq());
+        pos.flip_side_to_move();
+    }
+}
+
 int main() {
     Stockfish::Bitboards::init();
     Stockfish::Position::init();
@@ -324,87 +382,28 @@ int main() {
             if (TB[ix] == LOSS_IN(LEVEL-1)) {
                 std::memset(&pos, 0, sizeof(EGPosition));
                 index.pos_at_ix(pos, ix, BLACK);
-                // std::cout << "POSITION:" << std::endl;
-                // std::cout << pos << std::endl;
-                for (Move move : EGMoveList<REVERSE>(pos)) {
-                    // make reverse move and mark position as win in LEVEL
-                    pos.move_piece(move.from_sq(), move.to_sq()); // non-capture
-                    pos.flip_side_to_move();
-                    bool flipped = false;
 
-FLIP_ENTRY:                    
-                    uint64_t win_ix = index2.ix_from_pos(pos);
-                    // std::cout << "1." << move_to_uci(move, false) << " " << win_ix << std::endl;
-                    // EGPosition pos2;
-
-                    if (TB2[win_ix] == 0) {
-                        // EGMoveList moveList2 = EGMoveList<REVERSE>(pos);
-                        // if (moveList2.size() == 0) {
-                        //     // no move can lead to this position, e.g. stalemate
-                        //     std::cout << pos << "no reverse moves " << std::endl;
-                        //     continue;
-                        // }
-
-                        TB2[win_ix] = WIN_IN(LEVEL);
-                        if (N_LEVEL_POS == 0) { std::cout << pos << pos.fen() << ", ix: " << win_ix << std::endl; }
-                        N_LEVEL_POS++;
-
-                        // std::cout << pos << "set level of " << win_ix << " to " << LEVEL << std::endl;
-                        // std::memset(&pos2, 0, sizeof(EGPosition));
-                        // index.pos_at_ix(pos2, win_ix);
-                        // std::cout << "vs reconstructed" << std::endl;
-                        // std::cout << pos2 << std::endl;
-
-                        // print_transform(pos);
-
-                        
-                        for (Move move2 : EGMoveList<REVERSE>(pos)) {
-                            pos.move_piece(move2.from_sq(), move2.to_sq());
-                            pos.flip_side_to_move();
-                            // print_transform(pos);
-
-                            uint64_t maybe_loss_ix = index.ix_from_pos(pos);
-
-                            // std::cout << "2." << move_to_uci(move2, false) << " " << maybe_loss_ix << std::endl;
-                            // std::cout << pos << "set level of " << maybe_loss_ix << " to " << -(LEVEL+1) << std::endl;
-
-                            // std::memset(&pos2, 0, sizeof(EGPosition));
-                            // index.pos_at_ix(pos2, maybe_loss_ix);
-                            // std::cout << "reconstructed " << maybe_loss_ix << std::endl;
-                            // std::cout << pos2 << std::endl;
-
-                            if (TB[maybe_loss_ix] == 0)
-                                TB[maybe_loss_ix] = LOSS_IN(LEVEL+1); // mark as potential loss in LEVEL+1
-
-                            Square wk = pos.square<KING>(WHITE);
-                            Square bk = pos.square<KING>(BLACK);
-                            if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
-                                pos.flip_diagonally();
-                                maybe_loss_ix = index.ix_from_pos(pos);
-                                if (TB[maybe_loss_ix] == 0)
-                                    TB[maybe_loss_ix] = LOSS_IN(LEVEL+1); // mark as potential loss in LEVEL+1
-                                pos.flip_diagonally();
-                            }
-                            
-                            pos.move_piece(move2.to_sq(), move2.from_sq());
-                            pos.flip_side_to_move();
-                        }
+                Square wk = pos.square<KING>(WHITE);
+                Square bk = pos.square<KING>(BLACK);
+                if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
+                    pos.flip_diagonally();
+                    uint64_t flipped_ix = index.ix_from_pos(pos);
+                    if (TB[flipped_ix] != TB[ix]) {
+                        std::cout << "PANIC! " << TB[flipped_ix] << " vs " << TB[ix] << std::endl;
+                        std::cout << pos;
+                        exit(1);
                     }
-
-                    Square wk = pos.square<KING>(WHITE);
-                    Square bk = pos.square<KING>(BLACK);
-
-                    if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
-                        pos.flip_diagonally();
-                        if (!flipped) {
-                            flipped = true;
-                            goto FLIP_ENTRY;
-                        }
-                    }
-
-                    pos.move_piece(move.to_sq(), move.from_sq());
-                    pos.flip_side_to_move();
+                    pos.flip_diagonally();
                 }
+
+                add_wins(pos, LEVEL, index, TB, index2, TB2, &N_LEVEL_POS);
+
+                if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
+                    pos.flip_diagonally();
+                    add_wins(pos, LEVEL, index, TB, index2, TB2, &N_LEVEL_POS);
+                    pos.flip_diagonally();
+                }
+
             }
         }
         std::cout << N_LEVEL_POS << " positions at level " << LEVEL << std::endl;
@@ -413,11 +412,25 @@ FLIP_ENTRY:
 
         N_LEVEL_POS = 0;
         for (uint64_t ix = 0; ix < NPOS; ix++) {
-            if (TB[ix] == LOSS_IN(LEVEL)) { // potential loss in LEVEL
-            // if (TB[ix] == 0) {
+            // if (TB[ix] == LOSS_IN(LEVEL)) { // potential loss in LEVEL
+            if (TB[ix] == 0 || TB[ix] == MAYBELOSS) {
                 std::memset(&pos, 0, sizeof(EGPosition));
                 index.pos_at_ix(pos, ix, BLACK);
                 // std::cout << pos << std::endl;
+                Square wk = pos.square<KING>(WHITE);
+                Square bk = pos.square<KING>(BLACK);
+                // if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
+                //     pos.flip_diagonally();
+                //     uint64_t ix2 = index.ix_from_pos(pos);
+                //     if (TB[ix] != TB[ix2]) {
+                //         std::cout << "PANIC2! " << TB[ix] << " vs " << TB[ix2] << std::endl;
+                //         std::cout << pos << "\n";
+                //         // pos.flip_diagonally();
+                //         // std::cout << pos;
+                //         exit(1);
+                //     }
+                //     pos.flip_diagonally();
+                // }
 
                 // check that all forward moves lead to checkmate in <= -(LEVEL-1)
                 EGMoveList moveList = EGMoveList<FORWARD>(pos);
@@ -438,12 +451,7 @@ FLIP_ENTRY:
 
                         uint64_t fwd_ix = index2.ix_from_pos(pos);
                         int16_t val = TB2[fwd_ix];
-                        // std::cout << move_to_uci(move, false) << " " << val << std::endl;
-                        if (val != LOSS_IN(LEVEL) && val != WIN_IN(LEVEL) ) {
-                            max_val = std::max(max_val, (int16_t) -val);
-                        } else {
-                            max_val = std::max(max_val, (int16_t) 0);
-                        }
+                        max_val = std::max(max_val, (int16_t) -val);
                         pos.move_piece(move.to_sq(), move.from_sq());
                         pos.flip_side_to_move();
                     }
@@ -457,6 +465,11 @@ FLIP_ENTRY:
                         std::cout << "INCONSISTENT ERR: ";
                         std::cout << pos.fen() << std::endl;
                         std::cout << max_val << " vs " << LOSS_IN(LEVEL - 1) << std::endl; 
+                        print_pos_and_moves(pos, index, TB, index2, TB2);
+                        exit(1);
+                    }
+                    if (TB[ix] != MAYBELOSS) {
+                        std::cout << "Missed loss\n" << pos << std::endl;
                         print_pos_and_moves(pos, index, TB, index2, TB2);
                         exit(1);
                     }
