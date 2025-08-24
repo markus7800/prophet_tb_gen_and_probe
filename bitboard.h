@@ -38,6 +38,7 @@ std::string pretty(Bitboard b);
 
 }  // namespace Stockfish::Bitboards
 
+constexpr Bitboard FullBB =  0xffffffffffffffffULL;
 constexpr Bitboard FileABB = 0x0101010101010101ULL;
 constexpr Bitboard FileBBB = FileABB << 1;
 constexpr Bitboard FileCBB = FileABB << 2;
@@ -55,6 +56,12 @@ constexpr Bitboard Rank5BB = Rank1BB << (8 * 4);
 constexpr Bitboard Rank6BB = Rank1BB << (8 * 5);
 constexpr Bitboard Rank7BB = Rank1BB << (8 * 6);
 constexpr Bitboard Rank8BB = Rank1BB << (8 * 7);
+
+constexpr Bitboard TopHalfBB = Rank5BB | Rank6BB | Rank7BB | Rank8BB;
+constexpr Bitboard BottomHalfBB = Rank1BB | Rank2BB | Rank3BB | Rank4BB;
+
+constexpr Bitboard LeftHalfBB = FileABB | FileBBB | FileCBB | FileDBB;
+constexpr Bitboard RightHalfBB = FileEBB | FileFBB | FileGBB | FileHBB;
 
 extern uint8_t PopCnt16[1 << 16];
 extern uint8_t SquareDistance[SQUARE_NB][SQUARE_NB];
@@ -98,6 +105,37 @@ constexpr Bitboard square_bb(Square s) {
     return (1ULL << s);
 }
 
+
+constexpr Bitboard AboveDiagBB = 
+    square_bb(SQ_A8) | square_bb(SQ_B8) | square_bb(SQ_C8) | square_bb(SQ_D8) | square_bb(SQ_E8) | square_bb(SQ_F8) | square_bb(SQ_G8) |
+    square_bb(SQ_A7) | square_bb(SQ_B7) | square_bb(SQ_C7) | square_bb(SQ_D7) | square_bb(SQ_E7) | square_bb(SQ_F7) | 
+    square_bb(SQ_A6) | square_bb(SQ_B6) | square_bb(SQ_C6) | square_bb(SQ_D6) | square_bb(SQ_E6) |
+    square_bb(SQ_A5) | square_bb(SQ_B5) | square_bb(SQ_C5) | square_bb(SQ_D5) |
+    square_bb(SQ_A4) | square_bb(SQ_B4) | square_bb(SQ_C4) |
+    square_bb(SQ_A3) | square_bb(SQ_B3) |
+    square_bb(SQ_A2) ;
+
+constexpr Bitboard DiagBB = 
+    square_bb(SQ_A1) | square_bb(SQ_B2) | square_bb(SQ_C3) | square_bb(SQ_D4) | square_bb(SQ_E5) | square_bb(SQ_F6) | square_bb(SQ_G7) | square_bb(SQ_H8);
+
+constexpr Bitboard BelowDiagBB = 
+    square_bb(SQ_H7) |
+    square_bb(SQ_G6) | square_bb(SQ_H6) |
+    square_bb(SQ_F5) | square_bb(SQ_G5) | square_bb(SQ_H5) |
+    square_bb(SQ_E4) | square_bb(SQ_F4) | square_bb(SQ_G4) | square_bb(SQ_H4) |
+    square_bb(SQ_D3) | square_bb(SQ_E3) | square_bb(SQ_F3) | square_bb(SQ_G3) | square_bb(SQ_H3) |
+    square_bb(SQ_C2) | square_bb(SQ_D2) | square_bb(SQ_E2) | square_bb(SQ_F2) | square_bb(SQ_G2) | square_bb(SQ_H2) | 
+    square_bb(SQ_B1) | square_bb(SQ_C1) | square_bb(SQ_D1) | square_bb(SQ_E1) | square_bb(SQ_F1) | square_bb(SQ_G1) | square_bb(SQ_H1);
+
+// constexpr bool is_full1 = (FullBB == (TopHalfBB | BottomHalfBB));
+
+// constexpr bool is_full2 = (FullBB == (AboveDiagBB | DiagBB | BelowDiagBB));
+
+// constexpr bool is_empty1 = (AboveDiagBB & BelowDiagBB) == 0;
+
+// constexpr bool is_empty2 = (AboveDiagBB & DiagBB) == 0;
+
+// constexpr bool is_empty3 = (DiagBB & BelowDiagBB) == 0;
 
 // Overloads of bitwise operators between a Bitboard and a Square for testing
 // whether a given bit is set in a bitboard, and for setting and clearing bits.

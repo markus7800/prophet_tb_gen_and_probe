@@ -47,16 +47,17 @@ void KKXIndex::pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) const {
     ix = ix / N_KKX;
     pos.set_side_to_move(stm);
 
-
+    bool allondiag = true;
     Square occupied_sqs[6];
 
     Square ktm_sq = Square(KKX_KTM_SQ[kkx]);
+    allondiag = allondiag && (ktm_sq & DiagBB);
     Square kntm_sq = Square(KKX_KNTM_SQ[kkx]);
+    allondiag = allondiag && (kntm_sq & DiagBB);
     if (ktm_sq < kntm_sq) {
         occupied_sqs[0] = ktm_sq;
         occupied_sqs[1] = kntm_sq;
     } else {
-
         occupied_sqs[0] = kntm_sq;
         occupied_sqs[1] = ktm_sq;
     }
@@ -82,8 +83,8 @@ void KKXIndex::pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) const {
     for (Piece p : pieces) {
         if (p == NO_PIECE) { break; }
         Square orig_sq = Square(ix % s);
-        Square sq = orig_sq;
         ix = ix / s;
+        Square sq = orig_sq;
 
         // for (int j = 0; j < i; j++) {
         //     std::cout << j << ". " << int(occupied_sqs[j]) << std::endl;
@@ -100,6 +101,14 @@ void KKXIndex::pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) const {
             occupied_sqs[j+1] = occupied_sqs[j];
         }
         
+        if (allondiag && !(sq & DiagBB)) {
+            allondiag = false;
+            if (sq & AboveDiagBB) {
+                // put sq on bottom diag
+                sq = Square(((sq >> 3) | (sq << 3)) & 63);
+            }
+        }
+
         i++;
         occupied_sqs[k] = sq;
 
@@ -111,9 +120,9 @@ void KKXIndex::pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) const {
     }
 }
 
-inline Square transform(const Square sq, KKX_IX_T kkx_ix_tr) {
-    int8_t sq_ix = int8_t(sq) ^ kkx_ix_tr.flip;
-    return Square(((sq_ix >> kkx_ix_tr.swap) | (sq_ix << kkx_ix_tr.swap)) & 63);
+inline Square transform(const Square sq, int8_t flip, int8_t swap) {
+    int8_t sq_ix = int8_t(sq) ^ flip;
+    return Square(((sq_ix >> swap) | (sq_ix << swap)) & 63);
 }
 
 
@@ -136,7 +145,7 @@ void print_transform(const EGPosition &pos) {
             Bitboard bb = pos.pieces(c, pt);
             while (bb) {
                 Square sq = pop_lsb(bb);
-                pos2.put_piece(make_piece(c,pt), transform(sq, kkx_ix_tr));
+                pos2.put_piece(make_piece(c,pt), transform(sq, kkx_ix_tr.flip, kkx_ix_tr.swap));
             }
         }
     }
@@ -145,41 +154,65 @@ void print_transform(const EGPosition &pos) {
     std::cout << pos2 << std::endl;
 }
 
+inline void maybe_update_swap(Square sq, int8_t flip, bool& allondiag, int8_t& swap) {
+    // if this changes swap, we do not need to swap previous pieces since they are all on diagonal anyways
+    if (allondiag) {
+        if (!((sq ^ flip) & DiagBB)) {
+            allondiag = false;
+            swap = ((sq ^ flip) & AboveDiagBB) ? 3 : 0;
+        }
+    }
+}
+
 void transform_to(const EGPosition &pos, EGPosition &pos2) {
     Color stm = pos.side_to_move();
-
+    bool allondiag = true;
     Square orig_ktm_sq = pos.square<KING>(stm);
+    int8_t flip = ((orig_ktm_sq & RightHalfBB) ? 7 : 0) ^ ((orig_ktm_sq & TopHalfBB) ? 56 : 0);
+    int8_t swap = 0;
+    maybe_update_swap(orig_ktm_sq, flip, allondiag, swap);
+    pos2.put_piece(make_piece(stm, KING), transform(orig_ktm_sq, flip, swap));
+
     Square orig_kntm_sq = pos.square<KING>(~stm);
+    maybe_update_swap(orig_kntm_sq, flip, allondiag, swap);
+    pos2.put_piece(make_piece(~stm, KING), transform(orig_kntm_sq, flip, swap));
 
     KKX_IX_T kkx_ix_tr = get_kkx_ix_t(orig_ktm_sq, orig_kntm_sq);
+    assert (flip == kkx_ix_tr.flip);
 
-    for (PieceType pt = PAWN; pt <= KING; ++pt) {
-        for (Color c: {WHITE, BLACK}) {
+    for (PieceType pt: {QUEEN, ROOK, BISHOP, KNIGHT}) {
+        for (Color c: {~stm, stm}) {
             Bitboard bb = pos.pieces(c, pt);
-            while (bb) {
-                Square sq = pop_lsb(bb);
-                pos2.put_piece(make_piece(c,pt), transform(sq, kkx_ix_tr));
+            if (bb) {
+                Square sq = lsb(bb);
+                maybe_update_swap(sq, flip, allondiag, swap);
+                pos2.put_piece(make_piece(c,pt), transform(sq, flip, swap));
             }
         }
     }
     pos2.set_side_to_move(pos.side_to_move());
 }
 
+
 uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
     Color stm = pos.side_to_move();
 
+    bool allondiag = true;
+
     Square orig_ktm_sq = pos.square<KING>(stm);
+
+    int8_t flip = ((orig_ktm_sq & RightHalfBB) ? 7 : 0) ^ ((orig_ktm_sq & TopHalfBB) ? 56 : 0);
+    int8_t swap = 0;
+    maybe_update_swap(orig_ktm_sq, flip, allondiag, swap);
+    Square ktm_sq = transform(orig_ktm_sq, flip, swap);
+
+
     Square orig_kntm_sq = pos.square<KING>(~stm);
+    maybe_update_swap(orig_kntm_sq, flip, allondiag, swap);
+    Square kntm_sq = transform(orig_kntm_sq, flip, swap);
 
     KKX_IX_T kkx_ix_tr = get_kkx_ix_t(orig_ktm_sq, orig_kntm_sq);
-
-    Square ktm_sq = transform(orig_ktm_sq, kkx_ix_tr);
-    Square kntm_sq = transform(orig_kntm_sq, kkx_ix_tr);
-    // printf("kkx_ix_tr: %d %d %s->%s %s->%s\n", kkx_ix_tr.flip, kkx_ix_tr.swap,
-    //     square_to_uci(orig_ktm_sq).c_str(), square_to_uci(ktm_sq).c_str(),
-    //     square_to_uci(orig_kntm_sq).c_str(), square_to_uci(kntm_sq).c_str()
-    // );
-
+    assert (flip == kkx_ix_tr.flip);
 
     Square occupied_sqs[6];
 
@@ -217,10 +250,10 @@ uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
             Bitboard pieceBB = pos.pieces(c, p);
             if (pieceBB) {
                 Square orig_sq = lsb(pieceBB);
-                orig_sq = transform(orig_sq, kkx_ix_tr);
+                maybe_update_swap(orig_sq, flip, allondiag, swap);
+                Square sq = transform(orig_sq, flip, swap);
 
-
-                Square sq = orig_sq;
+                Square before_sq = sq;
 
                 int k = i;
                 for (int j = i-1; j >= 0; j--) {
@@ -236,7 +269,7 @@ uint64_t KKXIndex::ix_from_pos(EGPosition &pos) const {
                 //     std::cout << j << ". " << int(occupied_sqs[j]) << std::endl;
                 // }
 
-                occupied_sqs[k] = orig_sq;
+                occupied_sqs[k] = before_sq;
                 i++;
 
                 // std::cout << "initial p:" << PieceToChar[p] << ", sq:" << int(orig_sq) << " insert at " << k << std::endl;

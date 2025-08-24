@@ -334,7 +334,7 @@ bool EGPosition::is_legal_checkmate() const {
 void EGPosition::flip_diagonally() {
     for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
         if (rank_of(sq) > file_of(sq)) { continue; }
-        Square flipped_sq = Square((sq >> 3) | (sq << 3) & 63);
+        Square flipped_sq = Square(((sq >> 3) | (sq << 3)) & 63);
         // std::cout << int(sq) << " -> " << int(flipped_sq) << std::endl;
         Piece tmp = board[sq];
         board[sq] = board[flipped_sq];

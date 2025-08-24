@@ -68,7 +68,7 @@ void enumerate_kk_naive() {
 // sq' = (((sq >> 3) | (sq << 3)) & 63) ^ 63;
 
 void test_kkx_index() {
-    Color stm = WHITE;
+    Color stm = BLACK;
 
     PieceType pts[2] = {QUEEN, ROOK};
     Color cs[2] = {~stm, stm};
@@ -106,12 +106,13 @@ void test_kkx_index() {
                     uint64_t ix = index.ix_from_pos(pos1);
                     index.pos_at_ix(pos2, ix, stm);
                     transform_to(pos1, pos3);
+                    uint64_t ix2 = index.ix_from_pos(pos3);
 
-                    if (!pos2.is_equal(pos3)) {
+                    if (!pos2.is_equal(pos3) || ix != ix2) {
                         std::cout << pos1 << std::endl;
-                        std::cout << "vs at ix" << std::endl;
+                        std::cout << "vs at ix " << ix << std::endl;
                         std::cout << pos2 << std::endl;
-                        std::cout << "vs transformed" << std::endl;
+                        std::cout << "vs transformed at ix " << ix2 << std::endl;
                         std::cout << pos3 << std::endl;
                         exit(1);
                     }
@@ -127,6 +128,7 @@ void test_kkx_index() {
 inline int16_t WIN_IN(int16_t level) { return 1000 - level; }
 inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
 #define MAYBELOSS -1001
+#define UNUSEDIX -1002
 
 int16_t ab(EGPosition &pos, int16_t alpha, int16_t beta, int ply) {
     if (ply == 10) {
@@ -163,7 +165,7 @@ int16_t ab(EGPosition &pos, int16_t alpha, int16_t beta, int ply) {
 
 void print_pos_and_moves(EGPosition &pos, KKXIndex &index, int16_t* TB, KKXIndex &index2, int16_t* TB2) {
     uint64_t ix = index.ix_from_pos(pos);
-    std::cout << pos << pos.fen() << " with val:" << int(TB[ix]) << std::endl;
+    std::cout << pos << pos.fen() << " at ix: " << ix << " with val:" << int(TB[ix]) << std::endl;
     int16_t max_val = LOSS_IN(0);
     for (Move move : EGMoveList<FORWARD>(pos)) {
         if (move.to_sq() & pos.pieces()) {
@@ -298,13 +300,16 @@ int main() {
 
     init_kkx_index();
 
-    // test_kkx_index();
+    test_kkx_index();
     // return 0;
 
     std::vector<PieceType> stm_pieces = {};
     std::vector<PieceType> sntm_pieces = {QUEEN};
     KKXIndex index = KKXIndex(stm_pieces, sntm_pieces);
     KKXIndex index2 = KKXIndex(sntm_pieces, stm_pieces);
+    uint64_t NPOS = index.num_positions();
+    int16_t* TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
+    int16_t* TB2 = (int16_t*) calloc(sizeof(int16_t), NPOS);
     std::cout << "Num positions: " << index.num_positions() << std::endl;
 
     uint64_t count = 0;
@@ -313,10 +318,13 @@ int main() {
 
 
     // std::memset(&pos, 0, sizeof(EGPosition));
-    // index.pos_at_ix(pos, 25454);
-    // std::cout << pos << std::endl;
-    // EGMoveList testMoveList = EGMoveList<FORWARD>(pos);
-    // std::cout << testMoveList.size() << std::endl;
+    // index.pos_at_ix(pos, 7278, BLACK);
+    // print_pos_and_rev_moves(pos, index, TB, index2, TB2);
+
+    // std::memset(&pos, 0, sizeof(EGPosition));
+    // index2.pos_at_ix(pos, 7278, WHITE);
+    // print_pos_and_rev_moves(pos, index2, TB2, index, TB);
+
     // return 0;
 
     TimePoint t0 = now();
@@ -334,15 +342,6 @@ int main() {
                 // count++;
             }
         }
-        // std::cout << pos << std::endl;
-        // count++;
-
-        uint64_t ix2 = index.ix_from_pos(pos);
-        matches += (ix == ix2);
-        if (ix != ix2) {
-            std::cout << ix << " vs " << ix2 << std::endl;
-            break;
-        }
         
     }
 
@@ -352,18 +351,22 @@ int main() {
     TimePoint t1 = now();
     std::cout << "Finished in " << (t1-t0) / 1000.0 << std::endl;
 
-    uint64_t NPOS = index.num_positions();
-    int16_t* TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
 
-    int16_t* TB2 = (int16_t*) calloc(sizeof(int16_t), NPOS);
+
     // int16_t* GT_TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
 
+    uint64_t N_UNUSED = 0;
     // init
     int16_t LEVEL = 0;
     uint64_t N_LEVEL_POS = 0;
     for (uint64_t ix = 0; ix < NPOS; ix++) {
         std::memset(&pos, 0, sizeof(EGPosition));
         index.pos_at_ix(pos, ix, BLACK);
+        if (index.ix_from_pos(pos) != ix) {
+            TB[ix] = UNUSEDIX;
+            N_UNUSED++;
+            continue;
+        }
         if (pos.is_legal_checkmate()) {
             TB[ix] = LOSS_IN(LEVEL);
             N_LEVEL_POS++;
@@ -372,6 +375,7 @@ int main() {
     
 
     std::cout << N_LEVEL_POS << " positions at level " << LEVEL << std::endl;
+    std::cout << N_UNUSED << " unused" << std::endl;
 
     uint64_t iteration_counter = 0;
     while (N_LEVEL_POS > 0) {
@@ -383,25 +387,34 @@ int main() {
                 std::memset(&pos, 0, sizeof(EGPosition));
                 index.pos_at_ix(pos, ix, BLACK);
 
-                Square wk = pos.square<KING>(WHITE);
-                Square bk = pos.square<KING>(BLACK);
-                if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
-                    pos.flip_diagonally();
-                    uint64_t flipped_ix = index.ix_from_pos(pos);
-                    if (TB[flipped_ix] != TB[ix]) {
-                        std::cout << "PANIC! " << TB[flipped_ix] << " vs " << TB[ix] << std::endl;
-                        std::cout << pos;
-                        exit(1);
+                for (Move move : EGMoveList<REVERSE>(pos)) {
+                    // make reverse move and mark position as win in LEVEL
+                    pos.move_piece(move.from_sq(), move.to_sq()); // non-capture
+                    pos.flip_side_to_move();
+
+                    uint64_t win_ix = index2.ix_from_pos(pos);
+    
+                    if (TB2[win_ix] == 0) {
+                        TB2[win_ix] = WIN_IN(LEVEL);
+
+                        if (N_LEVEL_POS == 0) { std::cout << pos.fen() << ", ix: " << win_ix << std::endl; }
+                        (N_LEVEL_POS)++;
+
+                        for (Move move2 : EGMoveList<REVERSE>(pos)) {
+                            pos.move_piece(move2.from_sq(), move2.to_sq());
+                            pos.flip_side_to_move();
+
+                            uint64_t maybe_loss_ix = index.ix_from_pos(pos);
+                            if (TB[maybe_loss_ix] == 0) {
+                                TB[maybe_loss_ix] = MAYBELOSS; // mark as potential loss in LEVEL+1
+                            }
+                            pos.move_piece(move2.to_sq(), move2.from_sq());
+                            pos.flip_side_to_move();
+                        }
                     }
-                    pos.flip_diagonally();
-                }
 
-                add_wins(pos, LEVEL, index, TB, index2, TB2, &N_LEVEL_POS);
-
-                if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
-                    pos.flip_diagonally();
-                    add_wins(pos, LEVEL, index, TB, index2, TB2, &N_LEVEL_POS);
-                    pos.flip_diagonally();
+                    pos.move_piece(move.to_sq(), move.from_sq());
+                    pos.flip_side_to_move();
                 }
 
             }
@@ -412,25 +425,10 @@ int main() {
 
         N_LEVEL_POS = 0;
         for (uint64_t ix = 0; ix < NPOS; ix++) {
-            // if (TB[ix] == LOSS_IN(LEVEL)) { // potential loss in LEVEL
+            // if (TB[ix] == MAYBELOSS) {
             if (TB[ix] == 0 || TB[ix] == MAYBELOSS) {
                 std::memset(&pos, 0, sizeof(EGPosition));
                 index.pos_at_ix(pos, ix, BLACK);
-                // std::cout << pos << std::endl;
-                Square wk = pos.square<KING>(WHITE);
-                Square bk = pos.square<KING>(BLACK);
-                // if (rank_of(wk) == file_of(wk) && rank_of(bk) == file_of(bk)) {
-                //     pos.flip_diagonally();
-                //     uint64_t ix2 = index.ix_from_pos(pos);
-                //     if (TB[ix] != TB[ix2]) {
-                //         std::cout << "PANIC2! " << TB[ix] << " vs " << TB[ix2] << std::endl;
-                //         std::cout << pos << "\n";
-                //         // pos.flip_diagonally();
-                //         // std::cout << pos;
-                //         exit(1);
-                //     }
-                //     pos.flip_diagonally();
-                // }
 
                 // check that all forward moves lead to checkmate in <= -(LEVEL-1)
                 EGMoveList moveList = EGMoveList<FORWARD>(pos);
@@ -459,17 +457,10 @@ int main() {
                 if (max_val >= 0) {
                     TB[ix] = 0;
                 } else {
-                    if (N_LEVEL_POS == 0) { std::cout << pos << pos.fen() << ", ix: " << ix << std::endl; }
+                    if (N_LEVEL_POS == 0) { std::cout << pos.fen() << ", ix: " << ix << std::endl; }
                     N_LEVEL_POS++;
-                    if (max_val != LOSS_IN(LEVEL - 1)) {
-                        std::cout << "INCONSISTENT ERR: ";
-                        std::cout << pos.fen() << std::endl;
-                        std::cout << max_val << " vs " << LOSS_IN(LEVEL - 1) << std::endl; 
-                        print_pos_and_moves(pos, index, TB, index2, TB2);
-                        exit(1);
-                    }
                     if (TB[ix] != MAYBELOSS) {
-                        std::cout << "Missed loss\n" << pos << std::endl;
+                        std::cout << "Missed loss at ix " << ix << " at level " << LEVEL << " " << int(TB[ix]) << std::endl;
                         print_pos_and_moves(pos, index, TB, index2, TB2);
                         exit(1);
                     }
@@ -485,48 +476,12 @@ int main() {
     }
 
     // std::memset(&pos, 0, sizeof(EGPosition));
-    // index.pos_at_ix(pos, 901, BLACK);
-    // print_pos_and_moves(pos, index, TB, index2, TB2);
+    // index.pos_at_ix(pos, 10381, BLACK);
+    // print_pos_and_rev_moves(pos, index, TB, index2, TB2);
 
     // std::memset(&pos, 0, sizeof(EGPosition));
-    // index2.pos_at_ix(pos, 2334, WHITE);
-    // print_pos_and_moves(pos, index2, TB2, index, TB);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index.pos_at_ix(pos, 7352, BLACK);
-    // print_pos_and_moves(pos, index, TB, index2, TB2);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index2.pos_at_ix(pos, 21483, WHITE);
-    // print_pos_and_moves(pos, index2, TB2, index, TB);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index.pos_at_ix(pos, 7301, BLACK);
-    // print_pos_and_moves(pos, index, TB, index2, TB2);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index2.pos_at_ix(pos, 3140, WHITE);
-    // print_pos_and_moves(pos, index2, TB2, index, TB);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index.pos_at_ix(pos, 7334, BLACK);
-    // print_pos_and_moves(pos, index, TB, index2, TB2);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index2.pos_at_ix(pos, 21708, WHITE);
-    // print_pos_and_moves(pos, index2, TB2, index, TB);
-
-    // std::memset(&pos, 0, sizeof(EGPosition));
-    // index.pos_at_ix(pos, 5911, BLACK);
-    // print_pos_and_moves(pos, index, TB, index2, TB2);
-
-    std::memset(&pos, 0, sizeof(EGPosition));
-    index.pos_at_ix(pos, 10381, BLACK);
-    print_pos_and_rev_moves(pos, index, TB, index2, TB2);
-
-    std::memset(&pos, 0, sizeof(EGPosition));
-    index2.pos_at_ix(pos, 11066, WHITE);
-    print_pos_and_rev_moves(pos, index2, TB2, index, TB);
+    // index2.pos_at_ix(pos, 11066, WHITE);
+    // print_pos_and_rev_moves(pos, index2, TB2, index, TB);
 
     LEVEL = 0;
     while (true) {
