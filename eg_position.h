@@ -58,6 +58,9 @@ public:
     Piece do_move(Move m);
     void undo_move(Move m, Piece captured);
 
+    void do_rev_move(Move m);
+    void undo_rev_move(Move m);
+
     // int& get_wpiece_count() const;
     // int* get_bpiece_count() const;
 
@@ -221,6 +224,23 @@ inline void EGPosition::undo_move(Move m, Piece captured) {
     }
     sideToMove = ~sideToMove;
 }
+
+inline void EGPosition::do_rev_move(Move m) {
+    Square from     = m.from_sq();
+    Square to       = m.to_sq();
+    Piece  captured = piece_on(to);
+    assert(!captured);
+    move_piece(from, to);
+    sideToMove = ~sideToMove;
+}
+
+inline void EGPosition::undo_rev_move(Move m) {
+    Square from     = m.from_sq();
+    Square to       = m.to_sq();
+    move_piece(to, from);
+    sideToMove = ~sideToMove;
+}
+
 
 inline Color EGPosition::side_to_move() const { return sideToMove; }
 
