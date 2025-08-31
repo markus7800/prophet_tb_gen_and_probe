@@ -7,6 +7,9 @@
 #include "eg_position.h"
 #include "eg_movegen.h"
 #include "uci.h"
+#include <iostream>
+#include <fstream>
+#include <string>
 
 class GenEGTB {
     int pieces1[6];
@@ -49,10 +52,15 @@ int GenEGTB::num_pieces() const {
     return n_pieces;
 }
 
-uint64_t GenEGTB::num_positions() const {
+uint64_t compute_num_positions(const int pieces1[6], const int pieces2[6]) {
     // TODO
     uint64_t n = N_KKX;
-    int k = num_pieces();
+    
+    int k = 0;
+    for (int i = 0; i < 6; i++) {
+        k += pieces1[i] + pieces2[i];
+    }
+
     uint64_t s = 62;
     for (int i = 0; i < k; i++) {
         n *= s;
@@ -61,6 +69,49 @@ uint64_t GenEGTB::num_positions() const {
     return n;
 }
 
+uint64_t GenEGTB::num_positions() const {
+    return compute_num_positions(pieces1, pieces2);
+}
+
+std::string get_egtb_identifier(int pieces1[6], int pieces2[6]) {
+    std::ostringstream os;
+    for (int* pieces: {pieces1, pieces2}) {
+        os << "K";
+        for (PieceType pt = QUEEN; pt >= PAWN; --pt) {
+            for (int i = 0; i < pieces[pt]; i++) {
+                os << PieceToChar[pt];
+            }
+        }
+    }
+    return os.str();
+}
+
+std::string get_filename(int pieces1[6], int pieces2[6]) {
+    std::ostringstream os;
+    os << "egtbs/";
+    os << get_egtb_identifier(pieces1, pieces2);
+    os << ".egtb";
+    return os.str();
+}
+
+
+void store_egtb(int16_t* TB, int pieces1[6], int pieces2[6]) {
+    uint64_t NPOS = compute_num_positions(pieces1, pieces2);
+    std::string filename = get_filename(pieces1, pieces2);
+    std::ofstream outputFileStream;
+    outputFileStream.open(filename, std::ios::out|std::ios::binary);
+    for(uint64_t i=0; i<NPOS; i++)
+        outputFileStream.write((char*) &TB[i], sizeof(int16_t));
+}
+
+void load_egtb(int16_t* TB, int pieces1[6], int pieces2[6]) {
+    uint64_t NPOS = compute_num_positions(pieces1, pieces2);
+    std::string filename = get_filename(pieces1, pieces2);
+    std::ifstream inputFileStream;
+    inputFileStream.open(filename, std::ios::in|std::ios::binary);
+    for(uint64_t i=0; i<NPOS; i++)
+        inputFileStream.read((char*) &TB[i], sizeof(int16_t));
+}
 
 
 
@@ -216,6 +267,26 @@ void GenEGTB::gen() {
             break;
         }
     }
+    for (int mirrored = 0; mirrored <= 1; ++mirrored) {
+        int16_t* _TB = mirrored ? MIRROR_TB : TB;
+        std::string egtb = mirrored ? get_egtb_identifier(pieces1, pieces2) : get_egtb_identifier(pieces2, pieces1);
+
+        uint64_t wins = 0;
+        uint64_t draws = 0;
+        uint64_t losses = 0;
+        for (uint64_t ix = 0; ix < NPOS; ix++) {
+            if (_TB[ix] == UNUSEDIX) { continue; }
+            wins += (_TB[ix] > 0);
+            draws += (_TB[ix] == 0);
+            losses += (_TB[ix] < 0);
+        }
+        std::cout << wins << " wins in " << egtb << std::endl;
+        std::cout << draws << " draws in " << egtb << std::endl;
+        std::cout << losses << " losses in " << egtb << std::endl;
+    }
+
+    store_egtb(TB, pieces1, pieces2);
+    store_egtb(MIRROR_TB, pieces2, pieces1);
 }
 
 #endif
