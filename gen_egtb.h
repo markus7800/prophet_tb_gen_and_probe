@@ -268,7 +268,31 @@ void GenEGTB::gen() {
         std::cout << N_UNUSED << " unused indices" << std::endl;
     }
 
-    while (N_LEVEL_POS > 0) {
+    int16_t MIN_LEVEL = 0;
+    for (int wtm = 0; wtm <= 1; ++wtm) {
+        if (wtm) {
+            LOSS_TBs = WPC_WTM_TBs;
+            LOSS_TBs_NPOS = WPC_TBs_NPOS;
+        } else {
+            LOSS_TBs = BPC_BTM_TBs;
+            LOSS_TBs_NPOS = BPC_TBs_NPOS;
+        }
+        for (PieceType capture_pt = NO_PIECE_TYPE; capture_pt <= QUEEN; ++capture_pt) {
+            if (LOSS_TBs[capture_pt] == NULL) { continue; }
+            for (uint64_t ix = 0; ix < LOSS_TBs_NPOS[capture_pt]; ix++) {
+                int16_t val = LOSS_TBs[capture_pt][ix];
+                if (0 < val && val <= WIN_IN(0)) {
+                    MIN_LEVEL = std::max(MIN_LEVEL, (int16_t) (WIN_IN(0) - val));
+                }
+                if (0 > val && val >= LOSS_IN(0)) {
+                    MIN_LEVEL = std::max(MIN_LEVEL, (int16_t) (val - LOSS_IN(0)));
+                }
+            }
+        }
+    }
+    std::cout << "MIN_LEVEL = " << int(MIN_LEVEL) << std::endl;
+
+    while (true) {
         LEVEL++;
         N_LEVEL_POS = 0;
 
@@ -306,9 +330,11 @@ void GenEGTB::gen() {
                     if (LOSS_TBs[capture_pt][ix] == LOSS_IN(LEVEL-1)) {
                         pos.reset();
                         pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
+                        // if (WIN_TB == WTM_TB && ix == 292) { std::cout << ix << " " << pos; }
                         for (Move move : EGMoveList<REVERSE>(pos, capture_pt)) {
                             pos.do_rev_move(move, capture_pt); // can be capture to transition to WIN_TB
                             uint64_t win_ix = ix_from_pos(pos);
+                            // if (WIN_TB == WTM_TB && ix == 292) { std::cout << ix << " " << move_to_uci(move) << PieceToChar[capture_pt] << " -> " << win_ix << " with " << WIN_TB[win_ix] << std::endl; }
                             if (WIN_TB[win_ix] == 0 || WIN_TB[win_ix] == MAYBELOSS) { // MAYBELOSS could be set in ~wtm iteration, win is allowed to overwrite
                                 WIN_TB[win_ix] = WIN_IN(LEVEL);
 
@@ -412,9 +438,7 @@ void GenEGTB::gen() {
 
         std::cout << N_LEVEL_POS << " positions at level " << LEVEL << std::endl;
 
-        if (N_LEVEL_POS == 0) {
-            break;
-        }
+        if (LEVEL > MIN_LEVEL && N_LEVEL_POS == 0) { break; }
     }
 
 
@@ -443,7 +467,7 @@ void GenEGTB::gen() {
             }
         }
         std::cout << "Consistency check passed for level " << LEVEL << std::endl;
-        if (N_LEVEL_POS == 0) { break; }
+        if (LEVEL > MIN_LEVEL && N_LEVEL_POS == 0) { break; }
         
         LEVEL++;
         N_LEVEL_POS = 0;

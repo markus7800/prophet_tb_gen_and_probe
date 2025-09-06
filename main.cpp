@@ -109,12 +109,12 @@ int main() {
     // g = GenEGTB(&pieces1[0], &pieces2[0]);
     // g.gen();
 
-    pieces1 = {0, 0, 0, 0, 0, 1};
-    pieces2 = {0, 0, 0, 1, 0, 0};
+    pieces1 = {0, 0, 0, 0, 1, 0};
+    pieces2 = {0, 0, 0, 0, 1, 0};
 
     // EGPosition pos;
     // pos.reset();
-    // pos_at_ix(pos, 967, WHITE, &pieces1[0], &pieces2[0]);
+    // pos_at_ix(pos, 755, WHITE, &pieces1[0], &pieces2[0]);
     // std::cout << pos << std::endl;
     // exit(1);
     
