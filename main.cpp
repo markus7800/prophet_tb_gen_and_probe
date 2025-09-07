@@ -101,25 +101,30 @@ int main() {
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
     
-    // pieces1 = {0, 0, 0, 0, 0, 0};
-    // pieces2 = {0, 0, 0, 0, 0, 0};
-    // GenEGTB g = GenEGTB(&pieces1[0], &pieces2[0]);
-    // g.gen();
+    pieces1 = {0, 0, 0, 0, 0, 0};
+    pieces2 = {0, 0, 0, 0, 0, 0};
+    GenEGTB g = GenEGTB(&pieces1[0], &pieces2[0]);
+    g.gen();
     
-    // pieces1 = {0, 0, 0, 0, 0, 1};
-    // pieces2 = {0, 0, 0, 0, 0, 0};
-    // g = GenEGTB(&pieces1[0], &pieces2[0]);
-    // g.gen();
+    // 3 men, no pawns
+    /*
+    for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt) {
+        pieces1[pt]++;
+        g = GenEGTB(&pieces1[0], &pieces2[0]);
+        g.gen();
+        pieces1[pt]--;
+    }
+    */
 
-    // pieces1 = {0, 0, 0, 0, 1, 0};
-    // pieces2 = {0, 0, 0, 0, 0, 0};
-    // g = GenEGTB(&pieces1[0], &pieces2[0]);
-    // g.gen();
+
+    // 4 men
+    pieces1 = {0, 1, 0, 0, 0, 0};
+    pieces2 = {0, 0, 0, 0, 0, 0};
 
     pieces1 = {0, 0, 0, 0, 0, 1};
     pieces2 = {0, 0, 0, 0, 1, 0};
 
-    GenEGTB g = GenEGTB(&pieces1[0], &pieces2[0]);
+    g = GenEGTB(&pieces1[0], &pieces2[0]);
     g.gen();
 
     return 0;

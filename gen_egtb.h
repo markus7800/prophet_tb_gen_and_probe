@@ -108,12 +108,12 @@ class GenEGTB {
     int16_t* WTM_TB;
     int16_t* BTM_TB;
 
-    int16_t* WTM_TBs[6];
+    int16_t* WTM_TBs[6][6];
 
-    int16_t* BTM_TBs[6];
+    int16_t* BTM_TBs[6][6];
 
-    uint64_t WTM_TBs_NPOS[6];
-    uint64_t BTM_TBs_NPOS[6];
+    uint64_t WTM_TBs_NPOS[6][6];
+    uint64_t BTM_TBs_NPOS[6][6];
 
 public:
     GenEGTB(int wpieces[6], int bpieces[6]) {
@@ -124,40 +124,106 @@ public:
             this->n_pieces += wpieces[i] + bpieces[i];
         }
 
+        for (int i = 0; i < 6; i++) {
+            for (int j = 0; j < 6; j++) {
+                this->WTM_TBs[i][j] = NULL;
+                this->BTM_TBs[i][j] = NULL;
+            }
+        }
+
         uint64_t NPOS = num_positions();
         this->WTM_TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
         this->BTM_TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
 
-        this->WTM_TBs[NO_PIECE_TYPE] = WTM_TB;
-        this->BTM_TBs[NO_PIECE_TYPE] = BTM_TB;
-        this->WTM_TBs_NPOS[NO_PIECE_TYPE] = NPOS;
-        this->BTM_TBs_NPOS[NO_PIECE_TYPE] = NPOS;
 
         std::cout << "White pieces: " << get_pieces_identifier(wpieces) << std::endl;
         std::cout << "Black pieces: " << get_pieces_identifier(bpieces) << std::endl;
 
-        for (PieceType pt = PAWN; pt <= QUEEN; ++pt) {
-            if (wpieces[pt] > 0) {
-                wpieces[pt]--;
-                this->WTM_TBs_NPOS[pt] = compute_num_positions(wpieces, bpieces);
-                this->WTM_TBs[pt] = (int16_t*) calloc(sizeof(int16_t), this->WTM_TBs_NPOS[pt]);
-                load_egtb(this->WTM_TBs[pt], wpieces, bpieces);
-                std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white piece captured, white to move" << std::endl;
-                wpieces[pt]++;
-            } else {
-                this->WTM_TBs[pt] = NULL;
+        this->WTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = WTM_TB;
+        this->BTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = BTM_TB;
+        this->WTM_TBs_NPOS[NO_PIECE_TYPE][NO_PIECE_TYPE] = NPOS;
+        this->BTM_TBs_NPOS[NO_PIECE_TYPE][NO_PIECE_TYPE] = NPOS;
+
+        // captures
+        for (PieceType capture_pt = PAWN; capture_pt <= QUEEN; ++capture_pt) {
+            if (wpieces[capture_pt] > 0) {
+                wpieces[capture_pt]--;
+                uint64_t n = compute_num_positions(wpieces, bpieces);
+                this->WTM_TBs_NPOS[NO_PIECE_TYPE][capture_pt] = n;
+                this->WTM_TBs[NO_PIECE_TYPE][capture_pt] = (int16_t*) calloc(sizeof(int16_t), n);
+                load_egtb(this->WTM_TBs[NO_PIECE_TYPE][capture_pt], wpieces, bpieces);
+                std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white " << PieceToChar[capture_pt] << " captured, white to move" << std::endl;
+                wpieces[capture_pt]++;
             }
-            if (bpieces[pt] > 0) {
-                bpieces[pt]--;
-                this->BTM_TBs_NPOS[pt] = compute_num_positions(wpieces, bpieces);
-                this->BTM_TBs[pt] = (int16_t*) calloc(sizeof(int16_t), this->BTM_TBs_NPOS[pt]);
-                load_egtb(this->BTM_TBs[pt], bpieces, wpieces); 
-                std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black piece captured, black to move"  << std::endl;
-                bpieces[pt]++;
-            } else {
-                this->BTM_TBs[pt] = NULL;
+            if (bpieces[capture_pt] > 0) {
+                bpieces[capture_pt]--;
+                uint64_t n = compute_num_positions(wpieces, bpieces);
+                this->BTM_TBs_NPOS[NO_PIECE_TYPE][capture_pt] = n;
+                this->BTM_TBs[NO_PIECE_TYPE][capture_pt] = (int16_t*) calloc(sizeof(int16_t), n);
+                load_egtb(this->BTM_TBs[NO_PIECE_TYPE][capture_pt], bpieces, wpieces); 
+                std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
+                bpieces[capture_pt]++;
             }
         }
+
+        // promotions
+        for (PieceType promote_pt = KNIGHT; promote_pt <= QUEEN; ++promote_pt) {
+            if (bpieces[PAWN] > 0) {
+                bpieces[PAWN]--;
+                bpieces[promote_pt]++;
+                uint64_t n = compute_num_positions(wpieces, bpieces);
+                this->WTM_TBs_NPOS[promote_pt][NO_PIECE_TYPE] = n;
+                this->WTM_TBs[promote_pt][NO_PIECE_TYPE] = (int16_t*) calloc(sizeof(int16_t), n);
+                load_egtb(this->WTM_TBs[promote_pt][NO_PIECE_TYPE], wpieces, bpieces);
+                std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+                bpieces[PAWN]++;
+                bpieces[promote_pt]--;
+            }
+            if (wpieces[PAWN] > 0) {
+                wpieces[PAWN]--;
+                wpieces[promote_pt]++;
+                uint64_t n = compute_num_positions(wpieces, bpieces);
+                this->BTM_TBs_NPOS[promote_pt][NO_PIECE_TYPE] = n;
+                this->BTM_TBs[promote_pt][NO_PIECE_TYPE] = (int16_t*) calloc(sizeof(int16_t), n);
+                load_egtb(this->BTM_TBs[promote_pt][NO_PIECE_TYPE], bpieces, wpieces); 
+                std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+                wpieces[PAWN]++;
+                wpieces[promote_pt]--;
+            }
+        }
+
+        // capture promotions
+        for (PieceType promote_pt = KNIGHT; promote_pt <= QUEEN; ++promote_pt) {
+            for (PieceType capture_pt = KNIGHT; capture_pt <= QUEEN; ++capture_pt) {
+                if (bpieces[PAWN] > 0 && wpieces[capture_pt] > 0) {
+                    wpieces[capture_pt]--;
+                    bpieces[PAWN]--;
+                    bpieces[promote_pt]++;
+                    uint64_t n = compute_num_positions(wpieces, bpieces);
+                    this->WTM_TBs_NPOS[promote_pt][capture_pt] = n;
+                    this->WTM_TBs[promote_pt][capture_pt] = (int16_t*) calloc(sizeof(int16_t), n);
+                    load_egtb(this->WTM_TBs[promote_pt][capture_pt], wpieces, bpieces);
+                    std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white " << PieceToChar[capture_pt] << " captured with black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+                    wpieces[capture_pt]++;
+                    bpieces[PAWN]++;
+                    bpieces[promote_pt]--;
+                }
+                if (wpieces[PAWN] > 0 && bpieces[capture_pt] > 0) {
+                    bpieces[capture_pt]--;
+                    wpieces[PAWN]--;
+                    wpieces[promote_pt]++;
+                    uint64_t n = compute_num_positions(wpieces, bpieces);
+                    this->BTM_TBs_NPOS[promote_pt][capture_pt] = n;
+                    this->BTM_TBs[promote_pt][capture_pt] = (int16_t*) calloc(sizeof(int16_t), n);
+                    load_egtb(this->BTM_TBs[promote_pt][capture_pt], bpieces, wpieces); 
+                    std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+                    bpieces[capture_pt]++;
+                    wpieces[PAWN]++;
+                    wpieces[promote_pt]--;
+                }
+            }
+        }
+        
     }
 
 
@@ -188,7 +254,7 @@ inline int16_t IS_SET(int16_t val) { return val != 0 && LOSS_IN(0) <= val && val
 void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
     int16_t* TB = pos.side_to_move() == WHITE ? WTM_TB : BTM_TB;
     int16_t* MIRROR_TB = pos.side_to_move() == WHITE ? BTM_TB : WTM_TB;
-    int16_t** CAPTURE_TBs = pos.side_to_move() == WHITE ? BTM_TBs : WTM_TBs;
+    int16_t** CAPTURE_TBs = pos.side_to_move() == WHITE ? BTM_TBs[NO_PIECE_TYPE] : WTM_TBs[NO_PIECE_TYPE];
 
     if (verbose) std::cout << pos << pos.fen() << std::endl;
 
@@ -199,10 +265,10 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
     int16_t val;
     EGMoveList movelist = EGMoveList<FORWARD>(pos);
     for (Move move : movelist) {
-        Piece capture = pos.do_move(move);
+        PieceType capture = pos.do_move(move);
         uint64_t fwd_ix = ix_from_pos(pos);
         if (capture) {
-            val = CAPTURE_TBs[type_of(capture)][fwd_ix];
+            val = CAPTURE_TBs[capture][fwd_ix];
             if (verbose) std::cout << "  " << move_to_uci(move) << "x " << val << " at ix: " << fwd_ix << std::endl;
         } else {
             val = MIRROR_TB[fwd_ix];
@@ -287,14 +353,14 @@ void GenEGTB::gen() {
         if (wtm) {
             LOSS_COLOR = WHITE;
             LOSS_TB = WTM_TB;
-            LOSS_TBs = WTM_TBs;
-            LOSS_TBs_NPOS = WTM_TBs_NPOS;
+            LOSS_TBs = WTM_TBs[NO_PIECE_TYPE];
+            LOSS_TBs_NPOS = WTM_TBs_NPOS[NO_PIECE_TYPE];
             WIN_TB = BTM_TB;
         } else {
             LOSS_COLOR = BLACK;
             LOSS_TB = BTM_TB;
-            LOSS_TBs = BTM_TBs;
-            LOSS_TBs_NPOS = BTM_TBs_NPOS;
+            LOSS_TBs = BTM_TBs[NO_PIECE_TYPE];
+            LOSS_TBs_NPOS = BTM_TBs_NPOS[NO_PIECE_TYPE];
             WIN_TB = WTM_TB;
         }
         for (PieceType capture_pt = PAWN; capture_pt <= QUEEN; ++capture_pt) {
@@ -405,12 +471,12 @@ void GenEGTB::gen() {
             if (wtm) {
                 LOSS_TB = WTM_TB;
                 LOSS_COLOR = WHITE;
-                CAPTURE_TBs = BTM_TBs;
+                CAPTURE_TBs = BTM_TBs[NO_PIECE_TYPE];
                 WIN_TB = BTM_TB;
             } else {
                 LOSS_TB = BTM_TB;
                 LOSS_COLOR = BLACK;
-                CAPTURE_TBs = WTM_TBs;
+                CAPTURE_TBs = WTM_TBs[NO_PIECE_TYPE];
                 WIN_TB = WTM_TB;
             }
             assert (CAPTURE_TBs[type_of(NO_PIECE)] == WIN_TB);
@@ -430,10 +496,10 @@ void GenEGTB::gen() {
                         assert(LOSS_TB[ix] != MAYBELOSS); // cannot happen at MAYBELOSS position
                     } else {
                         for (Move move : moveList) {
-                            Piece capture = pos.do_move(move);
+                            PieceType capture = pos.do_move(move);
                             uint64_t fwd_ix = ix_from_pos(pos);
 
-                            int16_t val = -CAPTURE_TBs[type_of(capture)][fwd_ix]; // CAPTURE_TBs[0] = WIN_TB
+                            int16_t val = -CAPTURE_TBs[capture][fwd_ix]; // CAPTURE_TBs[0] = WIN_TB
                             max_val = std::max(max_val, val);
                             pos.undo_move(move, capture);
                         }

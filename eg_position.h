@@ -56,8 +56,8 @@ public:
 
     std::string fen() const;
 
-    Piece do_move(Move m);
-    void undo_move(Move m, Piece captured);
+    PieceType do_move(Move m);
+    void undo_move(Move m, PieceType captured);
 
     void do_rev_move(Move m, PieceType captured = NO_PIECE_TYPE);
     void undo_rev_move(Move m);
@@ -202,7 +202,7 @@ inline void EGPosition::move_piece(Square from, Square to) {
 }
 
 
-inline Piece EGPosition::do_move(Move m) {
+inline PieceType EGPosition::do_move(Move m) {
     Square from     = m.from_sq();
     Square to       = m.to_sq();
     Piece  captured = piece_on(to);
@@ -212,39 +212,26 @@ inline Piece EGPosition::do_move(Move m) {
     }
     move_piece(from, to);
     sideToMove = ~sideToMove;
-    return captured;
+    return type_of(captured);
 }
 
-inline void EGPosition::undo_move(Move m, Piece captured) {
+inline void EGPosition::undo_move(Move m, PieceType captured) {
     Square from     = m.from_sq();
     Square to       = m.to_sq();
 
     move_piece(to, from);
     if (captured) {
-        put_piece(captured, to);
+        put_piece(make_piece(sideToMove, captured), to);
     }
     sideToMove = ~sideToMove;
 }
 
 inline void EGPosition::do_rev_move(Move m, PieceType captured) {
-    Square from     = m.from_sq();
-    Square to       = m.to_sq();
-    assert(!piece_on(to));
-    move_piece(from, to);
-    if (captured) {
-        put_piece(make_piece(sideToMove, captured), from);
-    }
-    sideToMove = ~sideToMove;
+    undo_move(m, captured);
 }
 
 inline void EGPosition::undo_rev_move(Move m) {
-    Square from     = m.from_sq();
-    Square to       = m.to_sq();
-    if (piece_on(from)) {
-        remove_piece(from);
-    }
-    move_piece(to, from);
-    sideToMove = ~sideToMove;
+    do_move(m);
 }
 
 

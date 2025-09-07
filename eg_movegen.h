@@ -12,19 +12,27 @@ enum EGGenType {
 };
 
 
-template<Direction offset>
+template<Direction offset, EGGenType Type>
 inline Move* splat_pawn_moves(Move* moveList, Bitboard to_bb) {
     while (to_bb)
     {
         Square to   = pop_lsb(to_bb);
-        *moveList++ = Move(to - offset, to);
+        if constexpr (Type == REVERSE)
+            *moveList++ = Move(to, to - offset);
+        else
+            *moveList++ = Move(to - offset, to);
+
     }
     return moveList;
 }
 
+template<EGGenType Type>
 inline Move* splat_moves(Move* moveList, Square from, Bitboard to_bb) {
     while (to_bb)
-        *moveList++ = Move(from, pop_lsb(to_bb));
+        if constexpr (Type == REVERSE)
+            *moveList++ = Move(pop_lsb(to_bb), from);
+        else 
+            *moveList++ = Move(from, pop_lsb(to_bb));
     return moveList;
 }
 
@@ -64,8 +72,8 @@ Move* generate_pawn_moves(const EGPosition& pos, Move* moveList, Bitboard target
             b2 &= target;
         }
 
-        moveList = splat_pawn_moves<Up>(moveList, b1);
-        moveList = splat_pawn_moves<Up + Up>(moveList, b2);
+        moveList = splat_pawn_moves<Up, Type>(moveList, b1);
+        moveList = splat_pawn_moves<Up + Up, Type>(moveList, b2);
     }
 
     // Promotions and underpromotions
@@ -93,8 +101,8 @@ Move* generate_pawn_moves(const EGPosition& pos, Move* moveList, Bitboard target
         Bitboard b1 = shift<UpRight>(pawnsNotOn7) & enemies;
         Bitboard b2 = shift<UpLeft>(pawnsNotOn7) & enemies;
 
-        moveList = splat_pawn_moves<UpRight>(moveList, b1);
-        moveList = splat_pawn_moves<UpLeft>(moveList, b2);
+        moveList = splat_pawn_moves<UpRight, Type>(moveList, b1);
+        moveList = splat_pawn_moves<UpLeft, Type>(moveList, b2);
 
         // TODO: en-passant
     }
@@ -103,7 +111,7 @@ Move* generate_pawn_moves(const EGPosition& pos, Move* moveList, Bitboard target
 }
 
 
-template<Color Us, PieceType Pt>
+template<Color Us, PieceType Pt, EGGenType Type>
 Move* generate_moves(const EGPosition& pos, Move* moveList, Bitboard target) {
 
     static_assert(Pt != KING && Pt != PAWN, "Unsupported piece type in generate_moves()");
@@ -115,7 +123,7 @@ Move* generate_moves(const EGPosition& pos, Move* moveList, Bitboard target) {
         Square   from = pop_lsb(bb);
         Bitboard b    = attacks_bb<Pt>(from, pos.pieces()) & target;
 
-        moveList = splat_moves(moveList, from, b);
+        moveList = splat_moves<Type>(moveList, from, b);
     }
 
     return moveList;
@@ -132,14 +140,14 @@ Move* generate_all_fwd(const EGPosition& pos, Move* moveList, Bitboard checkers)
         Bitboard target = Type == FWD_EVASIONS ? between_bb(ksq, lsb(checkers)): ~pos.pieces(Us);
 
         moveList = generate_pawn_moves<Us, Type>(pos, moveList, target, checkers);
-        moveList = generate_moves<Us, KNIGHT>(pos, moveList, target);
-        moveList = generate_moves<Us, BISHOP>(pos, moveList, target);
-        moveList = generate_moves<Us, ROOK>(pos, moveList, target);
-        moveList = generate_moves<Us, QUEEN>(pos, moveList, target);
+        moveList = generate_moves<Us, KNIGHT, Type>(pos, moveList, target);
+        moveList = generate_moves<Us, BISHOP, Type>(pos, moveList, target);
+        moveList = generate_moves<Us, ROOK, Type>(pos, moveList, target);
+        moveList = generate_moves<Us, QUEEN, Type>(pos, moveList, target);
     }
 
     Bitboard b = attacks_bb<KING>(ksq) & ~pos.pieces(Us);
-    moveList = splat_moves(moveList, ksq, b);
+    moveList = splat_moves<Type>(moveList, ksq, b);
 
     return moveList;
 }
@@ -190,8 +198,8 @@ Move* generate_rev_pawn_moves(const EGPosition& pos, Move* moveList) {
         Bitboard b1 = shift<Down>(pawnsNotOn2) & emptySquares;
         Bitboard b2 = shift<Down>(b1 & TRank3BB) & emptySquares;
 
-        moveList = splat_pawn_moves<Down>(moveList, b1);
-        moveList = splat_pawn_moves<Down + Down>(moveList, b2);
+        moveList = splat_pawn_moves<Down, Type>(moveList, b1);
+        moveList = splat_pawn_moves<Down + Down, Type>(moveList, b2);
     }
 
     // no captures
@@ -206,13 +214,13 @@ Move* generate_all_rev(const EGPosition& pos, Move* moveList) {
     Bitboard target = ~pos.pieces(); // non-captures
 
     moveList = generate_rev_pawn_moves<Us, Type>(pos, moveList);
-    moveList = generate_moves<Us, KNIGHT>(pos, moveList, target);
-    moveList = generate_moves<Us, BISHOP>(pos, moveList, target);
-    moveList = generate_moves<Us, ROOK>(pos, moveList, target);
-    moveList = generate_moves<Us, QUEEN>(pos, moveList, target);
+    moveList = generate_moves<Us, KNIGHT, Type>(pos, moveList, target);
+    moveList = generate_moves<Us, BISHOP, Type>(pos, moveList, target);
+    moveList = generate_moves<Us, ROOK, Type>(pos, moveList, target);
+    moveList = generate_moves<Us, QUEEN, Type>(pos, moveList, target);
     
     Bitboard b = attacks_bb<KING>(ksq) & target;
-    moveList = splat_moves(moveList, ksq, b);
+    moveList = splat_moves<Type>(moveList, ksq, b);
 
     return moveList;
 }
@@ -255,7 +263,7 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType capture
     while (cur != moveList) {
         Square from = cur->from_sq();
         Square to = cur->to_sq();
-        PieceType pt = type_of(pos.piece_on(from));
+        PieceType pt = type_of(pos.piece_on(to));
 
         Bitboard fromTo = from | to;
         byTypeBB[ALL_PIECES] ^= fromTo;
@@ -263,14 +271,14 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType capture
         byColorBB[us] ^= fromTo;
 
         if (captured) {
-            byTypeBB[ALL_PIECES] ^= from;
-            byTypeBB[captured] ^= from;
-            byColorBB[~us] ^= from;
+            byTypeBB[ALL_PIECES] ^= to;
+            byTypeBB[captured] ^= to;
+            byColorBB[~us] ^= to;
         }
 
         if (attackers_to_exist_after_moving_piece(their_ksq, us, byTypeBB, byColorBB)) {
             *cur = *(--moveList);
-        } else if (cur->from_sq() != our_ksq && popcount(attackers_to_after_moving_piece(our_ksq, byTypeBB, byColorBB) & byColorBB[~us]) > 1) {
+        } else if (to != our_ksq && popcount(attackers_to_after_moving_piece(our_ksq, byTypeBB, byColorBB) & byColorBB[~us]) > 1) {
             // if our king is in double check after reversing move, only legal moves are king moves
             *cur = *(--moveList);
         } else {
@@ -278,9 +286,9 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType capture
         }
 
         if (captured) {
-            byTypeBB[ALL_PIECES] ^= from;
-            byTypeBB[captured] ^= from;
-            byColorBB[~us] ^= from;
+            byTypeBB[ALL_PIECES] ^= to;
+            byTypeBB[captured] ^= to;
+            byColorBB[~us] ^= to;
         }
         
         // Bitboard toFrom = to | from;
