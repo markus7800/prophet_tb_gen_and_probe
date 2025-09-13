@@ -395,6 +395,18 @@ inline Square pop_lsb(Bitboard& b) {
     b &= b - 1;
     return s;
 }
-
+inline Bitboard flippedDiagA1H8(Bitboard x) {
+   Bitboard t;
+   const Bitboard k1 = Bitboard(0x5500550055005500);
+   const Bitboard k2 = Bitboard(0x3333000033330000);
+   const Bitboard k4 = Bitboard(0x0f0f0f0f00000000);
+   t  = k4 & (x ^ (x << 28));
+   x ^=       t ^ (t >> 28) ;
+   t  = k2 & (x ^ (x << 14));
+   x ^=       t ^ (t >> 14) ;
+   t  = k1 & (x ^ (x <<  7));
+   x ^=       t ^ (t >>  7) ;
+   return x;
+}
 
 #endif  // #ifndef BITBOARD_H_INCLUDED

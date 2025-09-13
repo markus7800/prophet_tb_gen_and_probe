@@ -11,16 +11,16 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
     assert (wpieces[PAWN] + bpieces[PAWN] == 0);
     pos.set_side_to_move(stm);
 
-    bool allondiag = true;
+    bool is_diag_symmetric = true;
     Square occupied_sqs[6];
 
     uint64_t kkx = ix % N_KKX;
     ix = ix / N_KKX;
 
     Square ktm_sq = Square(KKX_KTM_SQ[kkx]);
-    allondiag = allondiag && (ktm_sq & DiagBB);
+    is_diag_symmetric = is_diag_symmetric && (ktm_sq & DiagBB);
     Square kntm_sq = Square(KKX_KNTM_SQ[kkx]);
-    allondiag = allondiag && (kntm_sq & DiagBB);
+    is_diag_symmetric = is_diag_symmetric && (kntm_sq & DiagBB);
 
     if (ktm_sq < kntm_sq) {
         occupied_sqs[0] = ktm_sq;
@@ -197,39 +197,66 @@ void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpie
     }
 }
 
-inline void maybe_update_swap(Square sq, int8_t flip, bool& allondiag, int8_t& swap) {
+inline Square transform(const Square sq, int8_t flip, int8_t swap) {
+    int8_t sq_ix = int8_t(sq) ^ flip;
+    return Square(((sq_ix >> swap) | (sq_ix << swap)) & 63);
+}
+
+inline void maybe_update_swap(Square sq, int8_t flip, bool& is_diag_symmetric, int8_t& swap) {
     // if this changes swap, we do not need to swap previous pieces since they are all on diagonal anyways
-    if (allondiag) {
+    if (is_diag_symmetric) {
         if (!((sq ^ flip) & DiagBB)) {
-            allondiag = false;
+            is_diag_symmetric = false;
             swap = ((sq ^ flip) & AboveDiagBB) ? 3 : 0;
         }
     }
 }
 
-inline Square transform(const Square sq, int8_t flip, int8_t swap) {
-    int8_t sq_ix = int8_t(sq) ^ flip;
-    return Square(((sq_ix >> swap) | (sq_ix << swap)) & 63);
+inline void maybe_update_swap_bb(Bitboard piecesBB, int8_t flip, bool& is_diag_symmetric, int8_t& swap) {
+    if (is_diag_symmetric) {
+        Bitboard b = 0;
+        Bitboard flipped_b = 0;
+        while (piecesBB) {
+            Square sq = pop_lsb(piecesBB);
+            b |= square_bb(transform(sq, flip, 0));
+            flipped_b |= square_bb(transform(sq, flip, 3));
+        }
+
+        if (flipped_b != b) {
+            is_diag_symmetric = false;
+            Bitboard lower = (b & BelowDiagBB) & ~(flipped_b & BelowDiagBB);
+            Bitboard lower_flipped = (flipped_b & BelowDiagBB) & ~(b & BelowDiagBB);
+            if (lower_flipped == 0) {
+                swap = 0;
+            } else if (lower == 0) {
+                swap = 3;
+            } else {
+                swap = lsb(lower_flipped) < lsb(lower) ? 3 : 0;
+            }
+        }
+
+    }
 }
+
 
 uint64_t ix_from_pos_kkx(EGPosition const &pos) {
     assert (pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK) == 0);
 
     Color stm = pos.side_to_move();
 
-    bool allondiag = true;
+    bool is_diag_symmetric = true;
     Square occupied_sqs[6];
 
     Square orig_ktm_sq = pos.square<KING>(stm);
 
     int8_t flip = ((orig_ktm_sq & RightHalfBB) ? 7 : 0) ^ ((orig_ktm_sq & TopHalfBB) ? 56 : 0);
     int8_t swap = 0;
-    maybe_update_swap(orig_ktm_sq, flip, allondiag, swap);
+    maybe_update_swap(orig_ktm_sq, flip, is_diag_symmetric, swap);
     Square ktm_sq = transform(orig_ktm_sq, flip, swap);
 
 
     Square orig_kntm_sq = pos.square<KING>(~stm);
-    maybe_update_swap(orig_kntm_sq, flip, allondiag, swap);
+    maybe_update_swap(orig_kntm_sq, flip, is_diag_symmetric, swap);
     Square kntm_sq = transform(orig_kntm_sq, flip, swap);
 
     int16_t kkx_ix = get_kkx_ix(orig_ktm_sq, orig_kntm_sq);
@@ -258,7 +285,7 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos) {
             if (pieceBB) {
                 if (!more_than_one(pieceBB)) {
                     Square orig_sq = lsb(pieceBB);
-                    maybe_update_swap(orig_sq, flip, allondiag, swap);
+                    maybe_update_swap(orig_sq, flip, is_diag_symmetric, swap);
                     Square sq = transform(orig_sq, flip, swap);
 
                     Square before_sq = sq;
@@ -281,9 +308,9 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos) {
 
                 } else {
                     int piece_count = 0;
+                    maybe_update_swap_bb(pieceBB, flip, is_diag_symmetric, swap);
                     while (pieceBB) {
                         Square orig_sq = pop_lsb(pieceBB);
-                        maybe_update_swap(orig_sq, flip, allondiag, swap);
                         Square sq = transform(orig_sq, flip, swap);
 
                         // transform messes up order of pop_lsb
@@ -422,7 +449,7 @@ uint64_t ix_from_pos(EGPosition const &pos) {
 void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2) {
     Color stm = pos.side_to_move();
 
-    bool allondiag = true;
+    bool is_diag_symmetric = true;
     int8_t flip = 0;
     int8_t swap = 0;
 
@@ -437,23 +464,31 @@ void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2) {
                 break;
             }
         }
-        allondiag = false; // disable diagonal symmetries
+        is_diag_symmetric = false; // disable diagonal symmetries
     }
 
-    maybe_update_swap(orig_ktm_sq, flip, allondiag, swap);
+    maybe_update_swap(orig_ktm_sq, flip, is_diag_symmetric, swap);
     pos2.put_piece(make_piece(stm, KING), transform(orig_ktm_sq, flip, swap));
 
     Square orig_kntm_sq = pos.square<KING>(~stm);
-    maybe_update_swap(orig_kntm_sq, flip, allondiag, swap);
+    maybe_update_swap(orig_kntm_sq, flip, is_diag_symmetric, swap);
     pos2.put_piece(make_piece(~stm, KING), transform(orig_kntm_sq, flip, swap));
 
     for (Color c: {~stm, stm}) {
         for (PieceType pt: {QUEEN, ROOK, BISHOP, KNIGHT, PAWN}) {
             Bitboard bb = pos.pieces(c, pt);
-            while (bb) {
-                Square sq = pop_lsb(bb);
-                maybe_update_swap(sq, flip, allondiag, swap);
-                pos2.put_piece(make_piece(c,pt), transform(sq, flip, swap));
+            if (bb) {
+                if (more_than_one(bb)) {
+                    maybe_update_swap_bb(bb, flip, is_diag_symmetric, swap);
+                    while (bb) {
+                        Square sq = pop_lsb(bb);
+                        pos2.put_piece(make_piece(c,pt), transform(sq, flip, swap));
+                    }
+                } else {
+                    Square sq = lsb(bb);
+                    maybe_update_swap(sq, flip, is_diag_symmetric, swap);
+                    pos2.put_piece(make_piece(c,pt), transform(sq, flip, swap));
+                }
             }
         }
     }
