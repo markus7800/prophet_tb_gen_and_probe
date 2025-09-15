@@ -304,13 +304,16 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType capture
         Square to = cur->to_sq();
         PieceType pt = type_of(pos.piece_on(to));
         // std::cout << move_to_uci(*cur) << std::endl;
+        if (promotion && (promotion != pt)) {   
+            *cur = *(--moveList);
+            continue;
+        }
 
         Bitboard fromTo = from | to;
         byTypeBB[ALL_PIECES] ^= fromTo;
         byColorBB[us] ^= fromTo;
 
         if (promotion) {
-            assert (promotion == pt);
             byTypeBB[PAWN] ^= from;
             byTypeBB[promotion] ^= to;
         } else {

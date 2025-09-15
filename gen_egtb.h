@@ -116,6 +116,11 @@ void load_egtb(int16_t* TB, int stm_pieces[6], int sntm_pieces[6]) {
         inputFileStream.read((char*) &TB[i], sizeof(int16_t));
 }
 
+bool egtb_exists(int stm_pieces[6], int sntm_pieces[6]) {
+    std::string filename = get_filename(stm_pieces, sntm_pieces);
+    std::ifstream inputFileStream = std::ifstream(filename);
+    return inputFileStream.good();
+}
 
 class GenEGTB {
     int wpieces[6];
@@ -284,9 +289,11 @@ inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
 #define MAYBELOSS -1001
 #define UNUSEDIX -1002
 inline int16_t IS_SET(int16_t val) { return val != 0 && LOSS_IN(0) <= val && val <= WIN_IN(0); }
+inline int16_t IS_UNSET(int16_t val) { return val == 0; } //  || val == MAYBELOSS
 
 
 void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
+    assert (!pos.sntm_in_check());
     int16_t* TB = pos.side_to_move() == WHITE ? WTM_TB : BTM_TB;
     int16_t* (*CAPTURE_TBs)[6] = pos.side_to_move() == WHITE ? BTM_TBs : WTM_TBs;
 
@@ -337,6 +344,12 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
 
 void GenEGTB::gen() {
     std::cout << "Generate " << get_egtb_identifier(wpieces, bpieces) << " and " << get_egtb_identifier(bpieces, wpieces) << std::endl;
+
+    if (egtb_exists(wpieces, bpieces)) {
+        std::cout << "Already exists." << std::endl;
+        return;
+    }
+
 
     uint64_t NPOS = num_positions();
     std::cout << "Number of positions: " << NPOS << std::endl;
@@ -468,21 +481,28 @@ void GenEGTB::gen() {
                         int16_t win_val = -val - 1;
                         pos.reset();
                         pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
-                        if (pos.sntm_in_check()) { continue; };
+                        assert (!pos.sntm_in_check());
+
+                        
 
                         for (int t = 0; t < N_SYMMETRIES; t++) {
                             transformed_pos.reset();
                             transform_to(pos, transformed_pos, H_FLIPS[t], V_FLIPS[t], SWAPS[t]);
 
-                            // if (ix == 558) { std::cout << transformed_pos << std::endl; }
+                            // if (promotion_pt == BISHOP && capture_pt == NO_PIECE_TYPE && ix == 96) {
+                            //     std::cout << transformed_pos;
+                            // }
 
                             for (Move move : EGMoveList<REVERSE>(transformed_pos, capture_pt, promotion_pt)) {
+                                // if (promotion_pt == BISHOP && capture_pt == NO_PIECE_TYPE && ix == 96) {
+                                //     std::cout << move_to_uci(move) << "x" << PieceToChar[capture_pt]  << " -> " << int(win_val) << std::endl;
+                                // }
                                 transformed_pos.do_rev_move(move, capture_pt);
                                 uint64_t win_ix = ix_from_pos(transformed_pos);
 
-                                // if (WIN_TB == WTM_TB && win_ix == 22700) std::cout << move_to_uci(move) << "x" << PieceToChar[capture_pt]  << " -> " << int(win_val) << std::endl;
 
-                                if (!IS_SET(WIN_TB[win_ix]) || WIN_TB[win_ix] < win_val ) {
+                                if (IS_UNSET(WIN_TB[win_ix]) || WIN_TB[win_ix] < win_val ) {
+                                    // assert (!transformed_pos.sntm_in_check());
                                     WIN_TB[win_ix] = win_val;
                                 }
                                 transformed_pos.undo_rev_move(move);
@@ -536,10 +556,11 @@ void GenEGTB::gen() {
                     int16_t win_val = WIN_IN(LEVEL);
                     pos.reset();
                     pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
+                    assert (!pos.sntm_in_check());
                     for (Move move : EGMoveList<REVERSE>(pos)) {
                         pos.do_rev_move(move);
                         uint64_t win_ix = ix_from_pos(pos);
-                        if (!IS_SET(WIN_TB[win_ix]) || WIN_TB[win_ix] < win_val ) {
+                        if (IS_UNSET(WIN_TB[win_ix]) || WIN_TB[win_ix] < win_val ) {
                             WIN_TB[win_ix] = win_val;
                         }
                         pos.undo_rev_move(move);
@@ -552,14 +573,22 @@ void GenEGTB::gen() {
                 if (WIN_TB[win_ix] == WIN_IN(LEVEL)) {
                     pos.reset();
                     pos_at_ix(pos, win_ix, ~LOSS_COLOR, wpieces, bpieces); // not much slower
+                    assert (!pos.sntm_in_check());
                     if (N_LEVEL_POS == 0) { std::cout << "WIN in " <<  LEVEL << ": " << pos.fen() << ", ix: " << win_ix << std::endl; }
                     N_LEVEL_POS++;
+
+                    // if (win_ix == 3260853 && LOSS_TB == BTM_TB) { std::cout << pos << win_ix << std::endl; }
 
                     for (Move move : EGMoveList<REVERSE>(pos)) {
                         pos.do_rev_move(move); // no capture, stay in WIN_TB / LOSS_TB config
                         uint64_t maybe_loss_ix = ix_from_pos(pos);
-                        if (LOSS_TB[maybe_loss_ix] == 0) {
+                        // if (win_ix == 3260853 && LOSS_TB == BTM_TB) { std::cout << move_to_uci(move) << " " << maybe_loss_ix << "\n"; }
+                        if (IS_UNSET(LOSS_TB[maybe_loss_ix])) {
                             LOSS_TB[maybe_loss_ix] = MAYBELOSS;
+                            // if (maybe_loss_ix == 4458573 && LOSS_TB == BTM_TB) {
+                            //     std::cout << "HERE win_ix=" << win_ix << std::endl;
+                            //     std::cout << pos;
+                            // }
                         }
                         pos.undo_rev_move(move);
                     }
@@ -601,6 +630,8 @@ void GenEGTB::gen() {
                     int16_t max_val = LOSS_IN(0);
                     if (moveList.size() == 0) {
                         max_val = 0; // has to be stale mate
+                        if (LOSS_TB[ix] == MAYBELOSS)
+                            std::cout << pos << ix << std::endl;
                         assert(LOSS_TB[ix] != MAYBELOSS); // cannot happen at MAYBELOSS position
                     } else {
                         for (Move move : moveList) {
@@ -652,14 +683,14 @@ void GenEGTB::gen() {
             if (WTM_TB[ix] == LOSS_IN(LEVEL) || WTM_TB[ix] == WIN_IN(LEVEL)) {
                 pos.reset();
                 pos_at_ix(pos, ix, WHITE, wpieces, bpieces);
-                if (pos.sntm_in_check()) { continue; }
+                assert (!pos.sntm_in_check());
                 check_consistency(pos, false);
                 N_LEVEL_POS++;
             }
             if (BTM_TB[ix] == LOSS_IN(LEVEL) || BTM_TB[ix] == WIN_IN(LEVEL)) {
                 pos.reset();
                 pos_at_ix(pos, ix, BLACK, wpieces, bpieces);
-                if (pos.sntm_in_check()) { continue; }
+                assert (!pos.sntm_in_check());
                 check_consistency(pos, false);
                 N_LEVEL_POS++;
             }
