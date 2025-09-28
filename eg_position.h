@@ -132,7 +132,9 @@ std::ostream& operator<<(std::ostream& os, const EGPosition& pos) {
     }
 
     os << "   a   b   c   d   e   f   g   h";// << "Checkers: ";
-    os << "    STM: " << (pos.side_to_move() == WHITE ? "WHITE" : "BLACK") << "\n";
+    os << "    STM: " << (pos.side_to_move() == WHITE ? "WHITE" : "BLACK");
+    os << (pos.ep_square() == SQ_NONE ? " - " : ", ep: " + square_to_uci(pos.ep_square()) + " ");
+    os << "\n";
     // os << Bitboards::pretty(pos.pieces()) << "\n";
     // for (Bitboard b = pos.checkers(pos.side_to_move()); b;)
     //     os << square_to_uci(pop_lsb(b)) << " ";
@@ -208,9 +210,10 @@ inline void EGPosition::move_piece(Square from, Square to) {
 inline PieceType EGPosition::do_move(Move m) {
     Square from     = m.from_sq();
     Square to       = m.to_sq();
-    Piece  captured = piece_on(to);
+    Piece  pc       = piece_on(from);
     Color  us       = sideToMove;
-
+    Color  them     = ~us;
+    Piece  captured = m.type_of() == EN_PASSANT ? make_piece(them, PAWN) : piece_on(to);
     if (captured) {
         Square capsq = (m.type_of() == EN_PASSANT) ? to - pawn_push(us) : to;
         remove_piece(capsq);
@@ -228,7 +231,7 @@ inline PieceType EGPosition::do_move(Move m) {
             if (!pawns)
                 break;
 
-            if (checkers() & ~square_bb(to))
+            if (checkers(us) & ~square_bb(to))
                 break;
 
             if (more_than_one(pawns)) {

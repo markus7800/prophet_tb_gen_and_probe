@@ -135,6 +135,26 @@ int main(int argc, char *argv[]) {
     // test_index();
 
 
+    EGPosition pos;
+    pos.reset();
+    pos.put_piece(W_KING, SQ_A1);
+    pos.put_piece(B_KING, SQ_H1);
+    pos.put_piece(W_PAWN, SQ_A2);
+    pos.put_piece(W_PAWN, SQ_E2);
+    pos.put_piece(W_PAWN, SQ_H2);
+    pos.put_piece(B_PAWN, SQ_B4);
+    pos.put_piece(B_PAWN, SQ_D4);
+    pos.put_piece(B_PAWN, SQ_F4);
+
+    // pos.do_move(Move(SQ_A2, SQ_A4));
+    // pos.do_move(Move(SQ_E2, SQ_E4));
+    pos.do_move(Move(SQ_H2, SQ_H4));
+
+    std::cout << pos;
+    for (Move m: EGMoveList<FORWARD>(pos)) {
+        std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
+    }
+
     exit(1);
 
     assert (argc > 0);
@@ -160,7 +180,7 @@ int main(int argc, char *argv[]) {
     Piece PIECES_ARR[] = {NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN};
 
     GenEGTB* g;
-    EGPosition pos;
+    // EGPosition pos;
     int16_t longest_overall_mate = WIN_IN(0) + 1;
     std::string longest_overall_mate_str;
 
