@@ -14,6 +14,11 @@
 #include <string>
 #include <unordered_map>
 
+#include <unistd.h> // close
+#include <fcntl.h> // open
+#include <sys/mman.h> // mmap
+#include <sys/stat.h> // file size
+
 uint64_t compute_num_positions(const int stm_pieces[6], const int sntm_pieces[6]) {
     int n_pawns = stm_pieces[PAWN] + sntm_pieces[PAWN];
     if (n_pawns == 0) {
@@ -107,7 +112,44 @@ void store_egtb(int16_t* TB, int stm_pieces[6], int sntm_pieces[6]) {
         outputFileStream.write((char*) &TB[i], sizeof(int16_t));
 }
 
-int16_t* load_egtb(int stm_pieces[6], int sntm_pieces[6]) {
+
+
+int16_t* load_egtb_mmap(int stm_pieces[6], int sntm_pieces[6]) {
+    // uint64_t NPOS = compute_num_positions(stm_pieces, sntm_pieces);
+    std::string filename = get_filename(stm_pieces, sntm_pieces);
+
+    struct stat st;
+    stat(filename.c_str(), &st);
+    int fd = open(filename.c_str(), O_RDONLY);
+
+    if (fd == -1) {
+        printf("Could not open file %s.\n", filename.c_str());
+        exit(EXIT_FAILURE);
+    }
+    int16_t* TB = (int16_t*) mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (TB == MAP_FAILED) {
+        close(fd);
+        perror("Error mmapping the file");
+        exit(EXIT_FAILURE);
+    }
+    // std::cout << "mmap " << filename << " to " << TB << " with size " << st.st_size  << std::endl;
+    close(fd);
+    return TB;
+}
+
+void free_egtb_mmap(int16_t* TB, int stm_pieces[6], int sntm_pieces[6]) {
+    std::string filename = get_filename(stm_pieces, sntm_pieces);
+    struct stat st;
+    stat(filename.c_str(), &st);
+    // std::cout << "munmap " << filename << " from " << TB << " with size " << st.st_size << std::endl;
+    int unmap = munmap(TB, st.st_size);
+    if (unmap == -1) {
+        perror("Error munmapping the file");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int16_t* load_egtb_in_memory(int stm_pieces[6], int sntm_pieces[6]) {
     uint64_t NPOS = compute_num_positions(stm_pieces, sntm_pieces); 
     int16_t* TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
     std::string filename = get_filename(stm_pieces, sntm_pieces);
@@ -117,6 +159,25 @@ int16_t* load_egtb(int stm_pieces[6], int sntm_pieces[6]) {
         inputFileStream.read((char*) &TB[i], sizeof(int16_t));
     return TB;
 }
+void free_egtb_in_memory(int16_t* TB) {
+    free(TB);
+}
+
+
+int16_t* load_egtb(int stm_pieces[6], int sntm_pieces[6], bool mmap) {
+    if (mmap)
+        return load_egtb_mmap(stm_pieces, sntm_pieces);
+    else
+        return load_egtb_in_memory(stm_pieces, sntm_pieces);
+}
+
+void free_egtb(int16_t* TB, int stm_pieces[6], int sntm_pieces[6], bool mmap) {
+    if (mmap)
+        free_egtb_mmap(TB, stm_pieces, sntm_pieces);
+    else
+        free_egtb_in_memory(TB);
+}
+
 
 bool egtb_exists(int stm_pieces[6], int sntm_pieces[6]) {
     std::string filename = get_filename(stm_pieces, sntm_pieces);
@@ -164,18 +225,48 @@ public:
     void allocate_and_load();
 
     ~GenEGTB() {
-        // std::cout << "~GenEGTB\n";
-        // is freed below
-        // free(WTM_TB);
-        // free(BTM_TB);
+        free(WTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE]);
+        free(BTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE]);
+        WTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = NULL;
+        BTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = NULL;
 
         for (PieceType promotion_pt = NO_PIECE_TYPE; promotion_pt <= QUEEN; ++promotion_pt) {
             for (PieceType capture_pt = NO_PIECE_TYPE; capture_pt <= QUEEN; ++capture_pt) {
                 if (WTM_TBs[promotion_pt][capture_pt] != NULL) {
-                    free(WTM_TBs[promotion_pt][capture_pt]);
+                    if (capture_pt) {
+                        wpieces[capture_pt]--;
+                    }
+                    if (promotion_pt) {
+                        bpieces[PAWN]--;
+                        bpieces[promotion_pt]++;
+                    }
+                    free_egtb(WTM_TBs[promotion_pt][capture_pt], wpieces, bpieces, true);
+                    WTM_TBs[promotion_pt][capture_pt] = NULL;
+                    if (capture_pt) {
+                        wpieces[capture_pt]++;
+                    }
+                    if (promotion_pt) {
+                        bpieces[PAWN]++;
+                        bpieces[promotion_pt]--;
+                    }
                 }
                 if (BTM_TBs[promotion_pt][capture_pt] != NULL) {
-                    free(BTM_TBs[promotion_pt][capture_pt]);
+                    if (capture_pt) {
+                        bpieces[capture_pt]--;
+                    }
+                    if (promotion_pt) {
+                        wpieces[PAWN]--;
+                        wpieces[promotion_pt]++;
+                    }
+                    free_egtb(BTM_TBs[promotion_pt][capture_pt], wpieces, bpieces, true);
+                    BTM_TBs[promotion_pt][capture_pt] = NULL;
+                    if (capture_pt) {
+                        bpieces[capture_pt]++;
+                    }
+                    if (promotion_pt) {
+                        wpieces[PAWN]++;
+                        wpieces[promotion_pt]--;
+                    }
                 }
             }
         }
@@ -204,7 +295,7 @@ void GenEGTB::allocate_and_load() {
             wpieces[capture_pt]--;
             uint64_t n = compute_num_positions(wpieces, bpieces);
             this->WTM_TBs_NPOS[NO_PIECE_TYPE][capture_pt] = n;
-            this->WTM_TBs[NO_PIECE_TYPE][capture_pt] = load_egtb(wpieces, bpieces);
+            this->WTM_TBs[NO_PIECE_TYPE][capture_pt] = load_egtb(wpieces, bpieces, true);
             std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white " << PieceToChar[capture_pt] << " captured, white to move" << std::endl;
             wpieces[capture_pt]++;
         }
@@ -212,7 +303,7 @@ void GenEGTB::allocate_and_load() {
             bpieces[capture_pt]--;
             uint64_t n = compute_num_positions(wpieces, bpieces);
             this->BTM_TBs_NPOS[NO_PIECE_TYPE][capture_pt] = n;
-            this->BTM_TBs[NO_PIECE_TYPE][capture_pt] = load_egtb(bpieces, wpieces); 
+            this->BTM_TBs[NO_PIECE_TYPE][capture_pt] = load_egtb(bpieces, wpieces, true); 
             std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
             bpieces[capture_pt]++;
         }
@@ -225,7 +316,7 @@ void GenEGTB::allocate_and_load() {
             bpieces[promote_pt]++;
             uint64_t n = compute_num_positions(wpieces, bpieces);
             this->WTM_TBs_NPOS[promote_pt][NO_PIECE_TYPE] = n;
-            this->WTM_TBs[promote_pt][NO_PIECE_TYPE] = load_egtb(wpieces, bpieces);
+            this->WTM_TBs[promote_pt][NO_PIECE_TYPE] = load_egtb(wpieces, bpieces, true);
             std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
             bpieces[PAWN]++;
             bpieces[promote_pt]--;
@@ -235,7 +326,7 @@ void GenEGTB::allocate_and_load() {
             wpieces[promote_pt]++;
             uint64_t n = compute_num_positions(wpieces, bpieces);
             this->BTM_TBs_NPOS[promote_pt][NO_PIECE_TYPE] = n;
-            this->BTM_TBs[promote_pt][NO_PIECE_TYPE] = load_egtb(bpieces, wpieces); 
+            this->BTM_TBs[promote_pt][NO_PIECE_TYPE] = load_egtb(bpieces, wpieces, true); 
             std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
             wpieces[PAWN]++;
             wpieces[promote_pt]--;
@@ -251,7 +342,7 @@ void GenEGTB::allocate_and_load() {
                 bpieces[promote_pt]++;
                 uint64_t n = compute_num_positions(wpieces, bpieces);
                 this->WTM_TBs_NPOS[promote_pt][capture_pt] = n;
-                this->WTM_TBs[promote_pt][capture_pt] = load_egtb(wpieces, bpieces);
+                this->WTM_TBs[promote_pt][capture_pt] = load_egtb(wpieces, bpieces, true);
                 std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white " << PieceToChar[capture_pt] << " captured with black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
                 wpieces[capture_pt]++;
                 bpieces[PAWN]++;
@@ -263,7 +354,7 @@ void GenEGTB::allocate_and_load() {
                 wpieces[promote_pt]++;
                 uint64_t n = compute_num_positions(wpieces, bpieces);
                 this->BTM_TBs_NPOS[promote_pt][capture_pt] = n;
-                this->BTM_TBs[promote_pt][capture_pt] = load_egtb(bpieces, wpieces); 
+                this->BTM_TBs[promote_pt][capture_pt] = load_egtb(bpieces, wpieces, true); 
                 std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
                 bpieces[capture_pt]++;
                 wpieces[PAWN]++;
@@ -449,11 +540,11 @@ void GenEGTB::gen(int nthreads) {
                 }
             }
         }
-        
+
         std::cout << "Stats for " << ((wtm) ? get_egtb_identifier(wpieces, bpieces) : get_egtb_identifier(bpieces, wpieces)) << ":\n";
-        std::cout << "Checkmate count: " << N_CHECKMATE << std::endl;
-        std::cout << N_UNUSED << " unused indices (" << (double) N_UNUSED / LOSS_NPOS * 100 << "%)" << std::endl;
-        std::cout << N_SNTM_IN_CHECK << " of which sntm in check (" << (double) N_SNTM_IN_CHECK / LOSS_NPOS * 100 << "%)" << std::endl;
+        std::cout << "    Checkmate count: " << N_CHECKMATE << std::endl;
+        std::cout << "    " << N_UNUSED << " unused indices (" << (double) N_UNUSED / LOSS_NPOS * 100 << "%)" << std::endl;
+        std::cout << "    " << N_SNTM_IN_CHECK << " of which sntm in check (" << (double) N_SNTM_IN_CHECK / LOSS_NPOS * 100 << "%)" << std::endl;
     }
  
     std::cout << "MIN_LEVEL = " << int(MIN_LEVEL) << std::endl;
@@ -583,9 +674,7 @@ void GenEGTB::gen(int nthreads) {
 
                             pos.undo_move(move, capture);
                             
-                            if (max_val > LOSS_IN(LEVEL-1)) {
-                                break;
-                            }
+                            if (max_val > LOSS_IN(LEVEL-1)) { break; }
                         }
                     }
                     

@@ -11,6 +11,12 @@
 #include <unordered_set>
 #include <omp.h>
 
+#include <unistd.h> // close
+#include <fcntl.h> // open
+#include <sys/mman.h> // mmap
+#include <sys/stat.h> // file size
+
+
 void test_index() {
 
     // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
@@ -150,10 +156,10 @@ int main(int argc, char *argv[]) {
     // pos.do_move(Move(SQ_E2, SQ_E4));
     pos.do_move(Move(SQ_H2, SQ_H4));
 
-    std::cout << pos;
-    for (Move m: EGMoveList<FORWARD>(pos)) {
-        std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
-    }
+    // std::cout << pos;
+    // for (Move m: EGMoveList<FORWARD>(pos)) {
+    //     std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
+    // }
 
     // exit(1);
 
@@ -172,7 +178,7 @@ int main(int argc, char *argv[]) {
     // uint64_t ix = ix_from_pos(pos);
     // std::cout << pos << ix << std::endl;
 
-    // pieces1 = {0, 2, 0, 0, 0, 0};
+    // pieces1 = {0, 1, 0, 0, 0, 0};
     // pieces2 = {0, 0, 0, 0, 0, 0};
 
     // uint64_t LOSS_NPOS = compute_num_positions(&pieces1[0], &pieces2[0]);
@@ -214,7 +220,7 @@ int main(int argc, char *argv[]) {
     uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
-    for (int piece_count = 0; piece_count <= 1; piece_count++) {
+    for (int piece_count = 0; piece_count <= 2; piece_count++) {
         for (int pawn_count = 0; pawn_count <= piece_count; pawn_count++ ) {
             for (Piece p1 : PIECES_ARR) {
                 for (Piece p2 : PIECES_ARR) {
@@ -241,7 +247,8 @@ int main(int argc, char *argv[]) {
                             g->~GenEGTB();
                             
                             uint64_t NPOS = compute_num_positions(&pieces1[0], &pieces2[0]);
-                            int16_t* TB = load_egtb(&pieces1[0], &pieces2[0]);
+                            int16_t* TB = load_egtb(&pieces1[0], &pieces2[0], true);
+
                             int16_t longest_mate = WIN_IN(0) + 1;
                             uint64_t longest_mate_ix = 0;
                             uint64_t unused_count = 0;
@@ -282,7 +289,7 @@ int main(int argc, char *argv[]) {
                             }
                             std::cout << "#unused " << unused_count << " (" << (double) unused_count / NPOS * 100 << "%)" << std::endl;
 
-                            free(TB);
+                            free_egtb(TB, &pieces1[0], &pieces2[0], true);
                         }
 
                         if (p1 != NO_PIECE) unplace_piece(p1, &pieces1[0], &pieces2[0]);
@@ -300,7 +307,7 @@ int main(int argc, char *argv[]) {
     // for (int i = 0; i < 512; i++) {
     //     printf("%3d: %10lu,\n", i, val_count[i]);
     // }
-    // std::cout << "unused: " << (double) val_count[511] / total_poscount * 100 << "%" << std::endl;
+    std::cout << "unused: " << (double) val_count[511] / total_poscount * 100 << "%" << std::endl;
 
     return 0;
 }
