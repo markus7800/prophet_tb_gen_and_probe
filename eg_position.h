@@ -175,6 +175,7 @@ std::string EGPosition::fen() const {
 
 inline void EGPosition::reset() {
     std::memset(this, 0, sizeof(EGPosition));
+    epSquare = SQ_NONE;
 }
 
 

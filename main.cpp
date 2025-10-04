@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
     uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
-    for (int piece_count = 0; piece_count <= 3; piece_count++) {
+    for (int piece_count = 0; piece_count <= 2; piece_count++) {
         for (int pawn_count = 0; pawn_count <= piece_count; pawn_count++ ) {
             for (Piece p1 : PIECES_ARR) {
                 for (Piece p2 : PIECES_ARR) {
@@ -258,7 +258,7 @@ int main(int argc, char *argv[]) {
                                     unused_count++;
                                     val_count[511]++;
                                 }
-                                if (IS_SET(val) && val > 0 && val < longest_mate) {
+                                if (0 < val && val < longest_mate) {
                                     longest_mate = val;
                                     longest_mate_ix = win_ix;
                                 }
@@ -297,11 +297,10 @@ int main(int argc, char *argv[]) {
 
     std::cout << "Longest mate: " << longest_overall_mate_str << std::endl;
 
-    for (int i = 0; i < 512; i++) {
-        printf("%3d: %10lu,\n", i, val_count[i]);
-    }
-
-    std::cout << "unused: " << (double) val_count[511] / total_poscount * 100 << "%" << std::endl;
+    // for (int i = 0; i < 512; i++) {
+    //     printf("%3d: %10lu,\n", i, val_count[i]);
+    // }
+    // std::cout << "unused: " << (double) val_count[511] / total_poscount * 100 << "%" << std::endl;
 
     return 0;
 }
