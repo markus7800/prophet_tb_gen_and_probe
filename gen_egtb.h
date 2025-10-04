@@ -279,8 +279,9 @@ inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
 // inline int16_t MAYBELOSS_IN(int16_t level) { return -1001; }
 inline int16_t MAYBELOSS_IN(int16_t level) { return -11000 + level; }
 // a position is MAYBELOSS_IN(level) if there is a move to position that is WIN_IN(level-1) and all other moves are <=WIN_IN(level-1) (draw and loss is possible)
-#define UNUSEDIX 1111
-inline int16_t IS_SET(int16_t val) { return val != 0 && LOSS_IN(0) <= val && val <= WIN_IN(0); }
+#define UNUSED 1111
+#define UNKNOWN 1110
+inline int16_t IS_SET(int16_t val) { return LOSS_IN(0) <= val && val <= WIN_IN(0); }
 // inline int16_t IS_UNSET(int16_t val) { return val == 0; }
 
 
@@ -376,25 +377,31 @@ void GenEGTB::gen(int nthreads) {
         uint64_t N_SNTM_IN_CHECK = 0;
         uint64_t N_CHECKMATE = 0;
 
-        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS) reduction(+:N_UNUSED) reduction(+:N_CHECKMATE) reduction(max:MIN_LEVEL)
+        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS) reduction(+:N_UNUSED) reduction(+:N_SNTM_IN_CHECK) reduction(+:N_CHECKMATE) reduction(max:MIN_LEVEL)
         for (uint64_t ix = 0; ix < LOSS_NPOS; ix++) {
             EGPosition pos;
             pos.reset();
             pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
             bool sntm_in_check = pos.sntm_in_check();
             if (ix_from_pos(pos) != ix || sntm_in_check) {
-                LOSS_TB[ix] = UNUSEDIX;
+                LOSS_TB[ix] = UNUSED;
                 N_UNUSED++;
                 N_SNTM_IN_CHECK += sntm_in_check;
                 continue;
+            } else {
+                LOSS_TB[ix] = UNKNOWN;
             }
+
             EGMoveList movelist = EGMoveList<FORWARD>(pos);
             if (movelist.size() == 0) {
                 if (pos.stm_in_check()) {
                     LOSS_TB[ix] = LOSS_IN(0);
                     N_CHECKMATE++;
                     N_LEVEL_POS++;
+                } else {
+                    LOSS_TB[ix] = 0;
                 }
+
             } else {
                 
                 int16_t max_val = LOSS_IN(0);
@@ -435,13 +442,14 @@ void GenEGTB::gen(int nthreads) {
                         // max_val is the upper bound on the val when only considering moves to dependent positions
                         LOSS_TB[ix] = MAYBELOSS_IN(max_val - LOSS_IN(0));
                     }
-                    if (max_val > 0) {
+                    if (max_val >= 0) {
+                        // known win and draw can be inferred from partial eval
                         LOSS_TB[ix] = max_val;
                     }
                 }
             }
-
         }
+        
         std::cout << "Stats for " << ((wtm) ? get_egtb_identifier(wpieces, bpieces) : get_egtb_identifier(bpieces, wpieces)) << ":\n";
         std::cout << "Checkmate count: " << N_CHECKMATE << std::endl;
         std::cout << N_UNUSED << " unused indices (" << (double) N_UNUSED / LOSS_NPOS * 100 << "%)" << std::endl;
@@ -504,7 +512,7 @@ void GenEGTB::gen(int nthreads) {
                         pos.do_rev_move(move); // no capture, stay in WIN_TB / LOSS_TB config
                         uint64_t maybe_loss_ix = ix_from_pos(pos);
                         if (!IS_SET(LOSS_TB[maybe_loss_ix])) {
-                            if (LOSS_TB[maybe_loss_ix] == 0) {
+                            if (LOSS_TB[maybe_loss_ix] == UNKNOWN) {
                                 LOSS_TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
                             } else {
                                 assert(LOSS_TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1);
@@ -512,8 +520,6 @@ void GenEGTB::gen(int nthreads) {
                                 // if SOME_LEVEL == LEVEL+1 this is what we would have set anyways
                                 // if SOME_LEVEL > LEVEL+1 there has to be a move to dependent table which is < WIN_IN(LEVEL)
                                 // SOME_LEVEL < LEVEL + 1 cannot happen as all such positions had to be considered previous iterations
-                                // std::cout << pos << int(LOSS_TB[maybe_loss_ix]) << std::endl;;
-                                // assert(false);
                             }
                         }
                         pos.undo_rev_move(move);
@@ -554,7 +560,7 @@ void GenEGTB::gen(int nthreads) {
 
                     // check that all forward moves lead to checkmate in <= -(LEVEL-1)
                     EGMoveList moveList = EGMoveList<FORWARD>(pos);
-                    int16_t max_val = LOSS_IN(0); // there is at least one move that leads to WIN_IN(LEVEL-1)
+                    int16_t max_val = LOSS_IN(LEVEL-1); // there is at least one move that leads to WIN_IN(LEVEL-1)
                     if (moveList.size() == 0) {
                         max_val = 0; // has to be stale mate
                         if (LOSS_TB[ix] == MAYBELOSS_IN(LEVEL))
@@ -565,34 +571,32 @@ void GenEGTB::gen(int nthreads) {
                             PieceType capture = pos.do_move(move);
                             PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
 
-                            uint64_t fwd_ix = ix_from_pos(pos);
+                            if (!promotion && !capture) {
+                                uint64_t fwd_ix = ix_from_pos(pos);
+                                int16_t val = WIN_TB[fwd_ix];
+                                if (val == UNKNOWN) {
+                                    max_val = 0;
+                                } else {
+                                    max_val = std::max(max_val, (int16_t) -val);
+                                }
+                            }
 
-                            int16_t val = -CAPTURE_TBs[promotion][capture][fwd_ix]; // CAPTURE_TBs[0][0] = WIN_TB
-                            max_val = std::max(max_val, val);
                             pos.undo_move(move, capture);
+                            
+                            if (max_val > LOSS_IN(LEVEL-1)) {
+                                break;
+                            }
                         }
                     }
-                    if (max_val >= 0) {
-                        LOSS_TB[ix] = 0;
+                    
+                    if (max_val == LOSS_IN(LEVEL-1)) {
+                        LOSS_TB[ix] = LOSS_IN(LEVEL);
+                        N_LEVEL_POS++;
                     } else {
-
-                        if (LOSS_TB[ix] != MAYBELOSS_IN(LEVEL)) {
-                            std::cout << "Missed loss with " << LOSS_TB[ix] << "\n" << pos;
-                            exit(1);
-                        }
-
-                        if (max_val == LOSS_IN(LEVEL-1)) {
-                            LOSS_TB[ix] = LOSS_IN(LEVEL);
-                            N_LEVEL_POS++;
-                        } else {
-                            // maybeloss can be refuted by finding non-capture non-promo move
-                            // std::cout << "HERE\n";
-                            // check_consistency(pos, true);
-                            // assert(false);
-                            LOSS_TB[ix] = 0;
-                        }
+                        // maybeloss can be refuted by finding non-capture non-promo move
+                        LOSS_TB[ix] = UNKNOWN;
                     }
-
+                    
                 }
             }
         }
@@ -603,6 +607,14 @@ void GenEGTB::gen(int nthreads) {
     }
 
 
+    uint64_t MAX_NPOS = std::max(WTM_NPOS, BTM_NPOS);
+    #pragma omp parallel for num_threads(nthreads) schedule(static,64)
+    for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
+        // all entries that are not known wins or losses are draws (TODO: set UNUSED to 0 as well in the future)
+        if (ix < WTM_NPOS && WTM_TB[ix] == UNKNOWN) WTM_TB[ix] = 0;
+        if (ix < BTM_NPOS && BTM_TB[ix] == UNKNOWN) BTM_TB[ix] = 0;
+    }
+
     TimePoint t1 = now();
     std::cout << "Finished in " << (double) (t1 - t0) / 1000.0 << "s." << std::endl;
 
@@ -610,7 +622,6 @@ void GenEGTB::gen(int nthreads) {
 
     LEVEL = 0;
     N_LEVEL_POS = 0;
-    uint64_t MAX_NPOS = std::max(WTM_NPOS, BTM_NPOS);
     while (true) {
         #pragma omp parallel for num_threads(nthreads) schedule(static,64)
         for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
@@ -666,7 +677,7 @@ void GenEGTB::gen(int nthreads) {
         uint64_t losses = 0;
         #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:wins) reduction(+:draws) reduction(+:losses)
         for (uint64_t ix = 0; ix < _NPOS; ix++) {
-            if (_TB[ix] == UNUSEDIX) { continue; }
+            if (_TB[ix] == UNUSED) { continue; }
             wins += (_TB[ix] > 0);
             draws += (_TB[ix] == 0);
             losses += (_TB[ix] < 0);

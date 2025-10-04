@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
     uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
-    for (int piece_count = 0; piece_count <= 2; piece_count++) {
+    for (int piece_count = 0; piece_count <= 1; piece_count++) {
         for (int pawn_count = 0; pawn_count <= piece_count; pawn_count++ ) {
             for (Piece p1 : PIECES_ARR) {
                 for (Piece p2 : PIECES_ARR) {
@@ -248,7 +248,7 @@ int main(int argc, char *argv[]) {
                             total_poscount += NPOS;
                             for (uint64_t win_ix = 0; win_ix < NPOS; win_ix++) {
                                 int16_t val = TB[win_ix];
-                                if (val != UNUSEDIX) {
+                                if (val != UNUSED) {
                                     if (val == 0) {
                                         val_count[0]++;
                                     } else {
