@@ -5,3 +5,4 @@ tmp*
 .vscode
 *.egtb
 *.zip
+*.gz

@@ -20,9 +20,11 @@
 void test_index() {
 
     // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
-    int wpieces[6] = {0, 2, 0, 0, 0, 0};
+    int wpieces[6] = {0, 1, 0, 0, 0, 0};
     int bpieces[6] = {0, 1, 0, 0, 0, 0};
     Color stm = WHITE;
+
+    EGTB egtb = stm == WHITE ? EGTB(wpieces, bpieces) : EGTB(bpieces, wpieces);
 
 
     PieceType pts[4] = {NO_PIECE_TYPE, NO_PIECE_TYPE, NO_PIECE_TYPE, NO_PIECE_TYPE};
@@ -55,8 +57,8 @@ void test_index() {
                 if (p1_sq == k1_sq || p1_sq == k2_sq) { continue; }
                 for (Square p2_sq = SQ_A1; p2_sq <= SQ_H8; ++p2_sq) {
                     if (p2_sq == k1_sq || p2_sq == k2_sq || p2_sq == p1_sq) { continue; }
-                    for (Square p3_sq = SQ_A1; p3_sq <= SQ_H8; ++p3_sq) {
-                        if (p3_sq == k1_sq || p3_sq == k2_sq || p3_sq == p1_sq || p3_sq == p2_sq) { continue; }
+                    // for (Square p3_sq = SQ_A1; p3_sq <= SQ_H8; ++p3_sq) {
+                    //     if (p3_sq == k1_sq || p3_sq == k2_sq || p3_sq == p1_sq || p3_sq == p2_sq) { continue; }
                     //     for (Square p4_sq = SQ_A1; p4_sq <= SQ_H8; ++p4_sq) {
                     //         if (p4_sq == k1_sq || p4_sq == k2_sq || p4_sq == p1_sq || p4_sq == p2_sq || p4_sq == p3_sq) { continue; }
 
@@ -68,16 +70,16 @@ void test_index() {
                                 pos1.put_piece(make_piece(stm, KING), k1_sq);
                                 pos1.put_piece(make_piece(~stm,KING), k2_sq);
                                 if (pts[0] == PAWN && !(p1_sq & PawnSquaresBB)) { continue; }
-                                if (pts[1] == PAWN && !(p2_sq & PawnSquaresBB)) { continue; }
-                                if (pts[2] == PAWN && !(p3_sq & PawnSquaresBB)) { continue; }
-                                // if (pts[3] == PAWN && !(p4_sq & PawnSquaresBB)) { continue; }
                                 pos1.put_piece(make_piece(cs[0],pts[0]), p1_sq);
+                                if (pts[1] == PAWN && !(p2_sq & PawnSquaresBB)) { continue; }
                                 pos1.put_piece(make_piece(cs[1],pts[1]), p2_sq);
-                                pos1.put_piece(make_piece(cs[2],pts[2]), p3_sq);
+                                // if (pts[2] == PAWN && !(p3_sq & PawnSquaresBB)) { continue; }
+                                // pos1.put_piece(make_piece(cs[2],pts[2]), p3_sq);
+                                // if (pts[3] == PAWN && !(p4_sq & PawnSquaresBB)) { continue; }
                                 // pos1.put_piece(make_piece(cs[3],pts[3]), p4_sq);
                                 pos1.set_side_to_move(stm);
 
-                                uint64_t ix = ix_from_pos(pos1);
+                                uint64_t ix = ix_from_pos(pos1, egtb.num_nonep_pos, egtb.num_ep_pos);
 
                                 // bool verbose = true;
                                 bool verbose = false;
@@ -92,13 +94,13 @@ void test_index() {
 
                                 if (verbose) std::cout << "A ix from pos\n";
                                 if (verbose) std::cout << "B pos at ix " << ix << "\n";
-                                pos_at_ix(pos2, ix, stm, wpieces, bpieces);
+                                pos_at_ix(pos2, ix, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
                                 if (verbose) std::cout << "C transform to canonical\n";
                                 transform_to_canoncial(pos1, pos3);
                                 if (verbose) std::cout << "D ix from canonical\n";
-                                uint64_t ix2 = ix_from_pos(pos3);
+                                uint64_t ix2 = ix_from_pos(pos3, egtb.num_nonep_pos, egtb.num_ep_pos);
                                 if (verbose) std::cout << "E transformed pos at ix " << ix2 << "\n";
-                                pos_at_ix(pos4, ix2, stm, wpieces, bpieces);
+                                pos_at_ix(pos4, ix2, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
                                 if (verbose) std::cout << "F\n";
 
                                 if (!pos2.is_equal(pos3) || ix != ix2 || !pos3.is_equal(pos4) || debug) {
@@ -115,7 +117,7 @@ void test_index() {
                                 // std::cout << "\n";
                             }
                     //     }
-                    }
+                    // }
                 }
             }
         }
@@ -139,6 +141,7 @@ int main(int argc, char *argv[]) {
     init_kkx_table();
     init_tril();
     // test_index();
+    // exit(0);
 
 
     EGPosition pos;
@@ -178,6 +181,7 @@ int main(int argc, char *argv[]) {
     // uint64_t ix = ix_from_pos(pos);
     // std::cout << pos << ix << std::endl;
 
+    
     /*
     pieces1 = {0, 2, 0, 0, 0, 0};
     pieces2 = {0, 0, 0, 0, 0, 0};
@@ -226,7 +230,7 @@ int main(int argc, char *argv[]) {
     uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
-    for (int piece_count = 0; piece_count <= 3; piece_count++) {
+    for (int piece_count = 0; piece_count <= 2; piece_count++) {
         for (int pawn_count = 0; pawn_count <= piece_count; pawn_count++ ) {
             for (Piece p1 : PIECES_ARR) {
                 for (Piece p2 : PIECES_ARR) {
@@ -251,28 +255,23 @@ int main(int argc, char *argv[]) {
                             g = new GenEGTB(&pieces1[0], &pieces2[0], "egtbs/");
                             g->gen(nthreads);
                             g->~GenEGTB();
-                            
+
                             std::cout << id << ": ";
                             
-                            uint64_t NPOS = compute_num_positions(&pieces1[0], &pieces2[0]);
-                            int16_t* TB = load_egtb(&pieces1[0], &pieces2[0], "egtbs/", true);
+                            EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
+                            load_egtb(&egtb, "egtbs/", true);
 
                             int16_t longest_mate = WIN_IN(0) + 1;
                             uint64_t longest_mate_ix = 0;
                             uint64_t unused_count = 0;
-                            total_poscount += NPOS;
-                            for (uint64_t win_ix = 0; win_ix < NPOS; win_ix++) {
-                                int16_t val = TB[win_ix];
-                                assert (IS_SET(val) || val == UNUSED);
-                                if (val != UNUSED) {
-                                    if (val == 0) {
-                                        val_count[0]++;
-                                    } else {
-                                        val_count[WIN_IN(0) - abs(val) + 1]++;
-                                    }
+                            total_poscount += egtb.num_pos;
+                            for (uint64_t win_ix = 0; win_ix < egtb.num_pos; win_ix++) {
+                                int16_t val = egtb.TB[win_ix];
+                                assert (IS_SET(val));
+                                if (val == 0) {
+                                    val_count[0]++;
                                 } else {
-                                    unused_count++;
-                                    val_count[511]++;
+                                    val_count[WIN_IN(0) - abs(val) + 1]++;
                                 }
                                 if (0 < val && val < longest_mate) {
                                     longest_mate = val;
@@ -284,24 +283,24 @@ int main(int argc, char *argv[]) {
                                 std::cout << "no win." << std::endl;
                             } else {
                                 pos.reset();
-                                pos_at_ix(pos, longest_mate_ix, WHITE, &pieces1[0], &pieces2[0]);
-                                std::cout << pos.fen() << " " << WIN_IN(0) - TB[longest_mate_ix];
+                                pos_at_ix(pos, longest_mate_ix, WHITE, &pieces1[0], &pieces2[0], egtb.num_nonep_pos, egtb.num_nonep_pos);
+                                std::cout << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
                                 if (longest_mate < longest_overall_mate) {
                                     longest_overall_mate = longest_mate;
                                     std::cout << "*";
 
                                     std::ostringstream oss;
-                                    oss << get_egtb_identifier(&pieces1[0], &pieces2[0]) << ": " << pos.fen() << " " << WIN_IN(0) - TB[longest_mate_ix];
+                                    oss << get_egtb_identifier(&pieces1[0], &pieces2[0]) << ": " << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
                                     longest_overall_mate_str = oss.str();
                                 }
                                 std::cout << std::endl;
                             }
-                            std::cout << "#unused " << unused_count << " (" << (double) unused_count / NPOS * 100 << "%)" << std::endl;
+                            std::cout << "#unused " << unused_count << " (" << (double) unused_count / egtb.num_pos * 100 << "%)" << std::endl;
 
-                            if (!egtb_exists(&pieces1[0], &pieces2[0], "egtbs8/")) {
-                                store_egtb_8bit(TB, &pieces1[0], &pieces2[0], "egtbs8/");
+                            if (!egtb_exists(&egtb, "egtbs8/")) {
+                                store_egtb_8bit(&egtb, "egtbs8/");
                             }
-                            free_egtb(TB, &pieces1[0], &pieces2[0], "egtbs/", true);
+                            free_egtb(&egtb);
                         }
 
                         if (p1 != NO_PIECE) unplace_piece(p1, &pieces1[0], &pieces2[0]);
@@ -319,7 +318,7 @@ int main(int argc, char *argv[]) {
     // for (int i = 0; i < 512; i++) {
     //     printf("%3d: %10lu,\n", i, val_count[i]);
     // }
-    std::cout << "unused: " << (double) val_count[511] / total_poscount * 100 << "%" << std::endl;
+    std::cout << "total count: " << total_poscount << std::endl;
 
     return 0;
 }

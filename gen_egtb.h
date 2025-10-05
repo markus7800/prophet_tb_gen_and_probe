@@ -30,62 +30,6 @@ inline int16_t IS_SET(int16_t val) { return LOSS_IN(0) <= val && val <= WIN_IN(0
 // inline int16_t IS_UNSET(int16_t val) { return val == 0; }
 
 
-uint64_t compute_num_positions(const int stm_pieces[6], const int sntm_pieces[6]) {
-    int n_pawns = stm_pieces[PAWN] + sntm_pieces[PAWN];
-    if (n_pawns == 0) {
-        uint64_t n = N_KKX;
-        uint64_t s = 62;
-        
-        for (int stm = 0; stm <= 1; ++stm) {
-            const int* pieces = (stm) ? stm_pieces : sntm_pieces;
-            for (PieceType i = KNIGHT; i < KING; ++i) {
-                n *= number_of_ordered_tuples(s, pieces[i]);
-                s -= pieces[i];
-            }
-        }
-
-        return n;
-
-    } else {
-        uint64_t n = 1;
-        uint64_t s = 64;
-
-        // pawns
-        uint64_t sp = 48;
-        bool first_pawn = true;
-        if (sntm_pieces[PAWN] > 0) {
-            n *= number_of_ordered_tuples_with_first_pawn(sntm_pieces[PAWN]);
-            s -= sntm_pieces[PAWN];
-            sp -= sntm_pieces[PAWN];
-            first_pawn = false;
-        }
-        if (stm_pieces[PAWN] > 0) {
-            if (first_pawn) {
-                n *= number_of_ordered_tuples_with_first_pawn(stm_pieces[PAWN]);
-            } else {
-                n *= number_of_ordered_tuples(sp, stm_pieces[PAWN]);
-            }
-            s -= stm_pieces[PAWN];
-        }
-
-
-        // kings
-        n *= s;
-        s--;
-        n *= s;
-        s--;
-
-        for (int stm = 0; stm <= 1; ++stm) {
-            const int* pieces = (stm) ? stm_pieces : sntm_pieces;
-            for (PieceType i = KNIGHT; i < KING; ++i) {
-                n *= number_of_ordered_tuples(s, pieces[i]);
-                s -= pieces[i];
-            }
-        }
-
-        return n;
-    }
-}
 std::string get_pieces_identifier(int pieces[6]) {
     std::ostringstream os;
     os << "K";
@@ -105,31 +49,47 @@ std::string get_egtb_identifier(int stm_pieces[6], int sntm_pieces[6]) {
     return os.str();
 }
 
-std::string get_filename(int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    std::ostringstream os;
-    os << folder;
-    os << get_egtb_identifier(stm_pieces, sntm_pieces);
-    os << ".egtb";
-    return os.str();
-}
+struct EGTB {
+    std::string id;
+    int16_t* TB;
+    uint64_t num_nonep_pos;
+    uint64_t num_ep_pos;
+    uint64_t num_pos;
+    std::string filename;
+    size_t filesize;
+    bool mmaped;
+    EGTB(int stm_pieces[6], int sntm_pieces[6]) {
+        id = get_egtb_identifier(stm_pieces, sntm_pieces);
+        num_nonep_pos = compute_num_nonep_positions(stm_pieces, sntm_pieces);
+        num_ep_pos = compute_num_ep_positions(stm_pieces, sntm_pieces);
+        num_pos = num_nonep_pos + num_ep_pos;
+    }
+};
 
 
-void store_egtb(int16_t* TB, int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    uint64_t NPOS = compute_num_positions(stm_pieces, sntm_pieces);
-    std::string filename = get_filename(stm_pieces, sntm_pieces, folder);
+// std::string get_filename(int stm_pieces[6], int sntm_pieces[6], std::string folder) {
+//     std::ostringstream os;
+//     os << folder;
+//     os << get_egtb_identifier(stm_pieces, sntm_pieces);
+//     os << ".egtb";
+//     return os.str();
+// }
+
+
+void store_egtb(EGTB* egtb, std::string folder) {
+    std::string filename = folder + egtb->id + ".egtb";
     std::ofstream outputFileStream;
     outputFileStream.open(filename, std::ios::out|std::ios::binary);
-    for(uint64_t i=0; i<NPOS; i++)
-        outputFileStream.write((char*) &TB[i], sizeof(int16_t));
+    for(uint64_t i=0; i<egtb->num_pos; i++)
+        outputFileStream.write((char*) &egtb->TB[i], sizeof(int16_t));
 }
 
-void store_egtb_8bit(int16_t* TB, int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    uint64_t NPOS = compute_num_positions(stm_pieces, sntm_pieces);
-    std::string filename = get_filename(stm_pieces, sntm_pieces, folder);
+void store_egtb_8bit(EGTB* egtb, std::string folder) {
+    std::string filename = folder + egtb->id + ".egtb";
     std::ofstream outputFileStream;
     outputFileStream.open(filename, std::ios::out|std::ios::binary);
-    for(uint64_t i=0; i<NPOS; i++) {
-        int16_t val = TB[i];
+    for(uint64_t i=0; i<egtb->num_pos; i++) {
+        int16_t val = egtb->TB[i];
         uint8_t out = 0;
         if (val == UNUSED) {
             out = 0;
@@ -156,12 +116,8 @@ void store_egtb_8bit(int16_t* TB, int stm_pieces[6], int sntm_pieces[6], std::st
 }
 
 
-
-
-int16_t* load_egtb_mmap(int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    // uint64_t NPOS = compute_num_positions(stm_pieces, sntm_pieces);
-    std::string filename = get_filename(stm_pieces, sntm_pieces, folder);
-
+void load_egtb_mmap(EGTB* egtb, std::string folder) {
+    std::string filename = folder + egtb->id + ".egtb";
     struct stat st;
     stat(filename.c_str(), &st);
     int fd = open(filename.c_str(), O_RDONLY);
@@ -170,61 +126,63 @@ int16_t* load_egtb_mmap(int stm_pieces[6], int sntm_pieces[6], std::string folde
         printf("Could not open file %s.\n", filename.c_str());
         exit(EXIT_FAILURE);
     }
-    int16_t* TB = (int16_t*) mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (TB == MAP_FAILED) {
+    egtb->TB = (int16_t*) mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (egtb->TB == MAP_FAILED) {
         close(fd);
         perror("Error mmapping the file");
         exit(EXIT_FAILURE);
     }
     // std::cout << "mmap " << filename << " to " << TB << " with size " << st.st_size  << std::endl;
+    egtb->mmaped = true;
+    egtb->filesize = st.st_size;
+    egtb->filename = filename;
     close(fd);
-    return TB;
 }
 
-void free_egtb_mmap(int16_t* TB, int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    std::string filename = get_filename(stm_pieces, sntm_pieces, folder);
-    struct stat st;
-    stat(filename.c_str(), &st);
+void free_egtb_mmap(EGTB* egtb) {
     // std::cout << "munmap " << filename << " from " << TB << " with size " << st.st_size << std::endl;
-    int unmap = munmap(TB, st.st_size);
+    assert (egtb->mmaped);
+    int unmap = munmap(egtb->TB, egtb->filesize);
     if (unmap == -1) {
         perror("Error munmapping the file");
         exit(EXIT_FAILURE);
     }
 }
 
-int16_t* load_egtb_in_memory(int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    uint64_t NPOS = compute_num_positions(stm_pieces, sntm_pieces); 
-    int16_t* TB = (int16_t*) calloc(sizeof(int16_t), NPOS);
-    std::string filename = get_filename(stm_pieces, sntm_pieces, folder);
+void load_egtb_in_memory(EGTB* egtb, std::string folder) {
+    std::string filename = folder + egtb->id + ".egtb";
     std::ifstream inputFileStream;
+    egtb->TB = (int16_t*) calloc(sizeof(int16_t), egtb->num_pos);
     inputFileStream.open(filename, std::ios::in|std::ios::binary);
-    for(uint64_t i=0; i<NPOS; i++)
-        inputFileStream.read((char*) &TB[i], sizeof(int16_t));
-    return TB;
+    for(uint64_t i=0; i<egtb->num_pos; i++)
+        inputFileStream.read((char*) &egtb->TB[i], sizeof(int16_t));
+    egtb->mmaped = false;
+    egtb->filename = filename;
 }
-void free_egtb_in_memory(int16_t* TB) {
-    free(TB);
+
+void free_egtb_in_memory(EGTB* egtb) {
+    assert (!egtb->mmaped);
+    free(egtb->TB);
 }
 
 
-int16_t* load_egtb(int stm_pieces[6], int sntm_pieces[6], std::string folder, bool mmap) {
+void load_egtb(EGTB* egtb, std::string folder, bool mmap) {
     if (mmap)
-        return load_egtb_mmap(stm_pieces, sntm_pieces, folder);
+        load_egtb_mmap(egtb, folder);
     else
-        return load_egtb_in_memory(stm_pieces, sntm_pieces, folder);
+        load_egtb_in_memory(egtb, folder);
 }
 
-void free_egtb(int16_t* TB, int stm_pieces[6], int sntm_pieces[6], std::string folder, bool mmap) {
-    if (mmap)
-        free_egtb_mmap(TB, stm_pieces, sntm_pieces, folder);
+void free_egtb(EGTB* egtb) {
+    if (egtb->mmaped)
+        free_egtb_mmap(egtb);
     else
-        free_egtb_in_memory(TB);
+        free_egtb_in_memory(egtb);
 }
 
 
-bool egtb_exists(int stm_pieces[6], int sntm_pieces[6], std::string folder) {
-    std::string filename = get_filename(stm_pieces, sntm_pieces, folder);
+bool egtb_exists(EGTB* egtb, std::string folder) {
+    std::string filename = egtb->id + folder + ".egtb";
     std::ifstream inputFileStream = std::ifstream(filename);
     return inputFileStream.good();
 }
@@ -235,17 +193,11 @@ class GenEGTB {
     int bpieces[6];
     int n_pieces;
 
-    int16_t* WTM_TB;
-    int16_t* BTM_TB;
-    uint64_t WTM_NPOS;
-    uint64_t BTM_NPOS;
+    EGTB* WTM_EGTB;
+    EGTB* BTM_EGTB;
 
-    int16_t* WTM_TBs[6][6];
-
-    int16_t* BTM_TBs[6][6];
-
-    uint64_t WTM_TBs_NPOS[6][6];
-    uint64_t BTM_TBs_NPOS[6][6];
+    EGTB* WTM_EGTBs[6][6];
+    EGTB* BTM_EGTBs[6][6];
 
 public:
     GenEGTB(int wpieces[6], int bpieces[6], std::string folder) {
@@ -260,59 +212,34 @@ public:
 
         for (int i = 0; i < 6; i++) {
             for (int j = 0; j < 6; j++) {
-                this->WTM_TBs[i][j] = NULL;
-                this->BTM_TBs[i][j] = NULL;
+                this->WTM_EGTBs[i][j] = NULL;
+                this->BTM_EGTBs[i][j] = NULL;
             }
         }
-    
-        WTM_NPOS = compute_num_positions(wpieces, bpieces);
-        BTM_NPOS = compute_num_positions(bpieces, wpieces);
+
+        this->WTM_EGTB = new EGTB(wpieces, bpieces);
+        this->BTM_EGTB = new EGTB(bpieces, wpieces);
     }
     void allocate_and_load();
 
     ~GenEGTB() {
-        free(WTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE]);
-        free(BTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE]);
-        WTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = NULL;
-        BTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = NULL;
+        free_egtb(WTM_EGTB);
+        free_egtb(BTM_EGTB);
+        free(WTM_EGTB);
+        free(BTM_EGTB);
+
+        this->WTM_EGTBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = NULL;
+        this->BTM_EGTBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = NULL;
 
         for (PieceType promotion_pt = NO_PIECE_TYPE; promotion_pt <= QUEEN; ++promotion_pt) {
             for (PieceType capture_pt = NO_PIECE_TYPE; capture_pt <= QUEEN; ++capture_pt) {
-                if (WTM_TBs[promotion_pt][capture_pt] != NULL) {
-                    if (capture_pt) {
-                        wpieces[capture_pt]--;
-                    }
-                    if (promotion_pt) {
-                        bpieces[PAWN]--;
-                        bpieces[promotion_pt]++;
-                    }
-                    free_egtb(WTM_TBs[promotion_pt][capture_pt], wpieces, bpieces, folder, true);
-                    WTM_TBs[promotion_pt][capture_pt] = NULL;
-                    if (capture_pt) {
-                        wpieces[capture_pt]++;
-                    }
-                    if (promotion_pt) {
-                        bpieces[PAWN]++;
-                        bpieces[promotion_pt]--;
-                    }
+                if (WTM_EGTBs[promotion_pt][capture_pt] != NULL) {
+                    free_egtb(WTM_EGTBs[promotion_pt][capture_pt]);
+                    free(WTM_EGTBs[promotion_pt][capture_pt]);
                 }
-                if (BTM_TBs[promotion_pt][capture_pt] != NULL) {
-                    if (capture_pt) {
-                        bpieces[capture_pt]--;
-                    }
-                    if (promotion_pt) {
-                        wpieces[PAWN]--;
-                        wpieces[promotion_pt]++;
-                    }
-                    free_egtb(BTM_TBs[promotion_pt][capture_pt], wpieces, bpieces, folder, true);
-                    BTM_TBs[promotion_pt][capture_pt] = NULL;
-                    if (capture_pt) {
-                        bpieces[capture_pt]++;
-                    }
-                    if (promotion_pt) {
-                        wpieces[PAWN]++;
-                        wpieces[promotion_pt]--;
-                    }
+                if (BTM_EGTBs[promotion_pt][capture_pt] != NULL) {
+                    free_egtb(BTM_EGTBs[promotion_pt][capture_pt]);
+                    free(BTM_EGTBs[promotion_pt][capture_pt]);
                 }
             }
         }
@@ -323,34 +250,31 @@ public:
 };
 
 void GenEGTB::allocate_and_load() {
-    this->WTM_TB = (int16_t*) calloc(sizeof(int16_t), WTM_NPOS);
-    this->BTM_TB = (int16_t*) calloc(sizeof(int16_t), BTM_NPOS);
-
+    this->WTM_EGTB->TB = (int16_t*) calloc(sizeof(int16_t), WTM_EGTB->num_pos);
+    this->WTM_EGTB->mmaped = false;
+    this->BTM_EGTB->TB = (int16_t*) calloc(sizeof(int16_t), BTM_EGTB->num_pos);
+    this->BTM_EGTB->mmaped = false;
 
     std::cout << "White pieces: " << get_pieces_identifier(wpieces) << std::endl;
     std::cout << "Black pieces: " << get_pieces_identifier(bpieces) << std::endl;
 
-    this->WTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = WTM_TB;
-    this->BTM_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = BTM_TB;
-    this->WTM_TBs_NPOS[NO_PIECE_TYPE][NO_PIECE_TYPE] = WTM_NPOS;
-    this->BTM_TBs_NPOS[NO_PIECE_TYPE][NO_PIECE_TYPE] = BTM_NPOS;
+    this->WTM_EGTBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = WTM_EGTB;
+    this->BTM_EGTBs[NO_PIECE_TYPE][NO_PIECE_TYPE] = BTM_EGTB;
 
     // captures
     for (PieceType capture_pt = PAWN; capture_pt <= QUEEN; ++capture_pt) {
         if (wpieces[capture_pt] > 0) {
             wpieces[capture_pt]--;
-            uint64_t n = compute_num_positions(wpieces, bpieces);
-            this->WTM_TBs_NPOS[NO_PIECE_TYPE][capture_pt] = n;
-            this->WTM_TBs[NO_PIECE_TYPE][capture_pt] = load_egtb(wpieces, bpieces, folder, true);
-            std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white " << PieceToChar[capture_pt] << " captured, white to move" << std::endl;
+            EGTB* egtb = new EGTB(wpieces, bpieces); load_egtb(egtb, folder, true);
+            std::cout << "Loaded " << egtb->id << " for white " << PieceToChar[capture_pt] << " captured, white to move" << std::endl;
+            this->WTM_EGTBs[NO_PIECE_TYPE][capture_pt] = egtb;
             wpieces[capture_pt]++;
         }
         if (bpieces[capture_pt] > 0) {
             bpieces[capture_pt]--;
-            uint64_t n = compute_num_positions(wpieces, bpieces);
-            this->BTM_TBs_NPOS[NO_PIECE_TYPE][capture_pt] = n;
-            this->BTM_TBs[NO_PIECE_TYPE][capture_pt] = load_egtb(bpieces, wpieces, folder, true); 
-            std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
+            EGTB* egtb = new EGTB(bpieces, wpieces); load_egtb(egtb, folder, true); 
+            std::cout << "Loaded " << egtb->id << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
+            this->BTM_EGTBs[NO_PIECE_TYPE][capture_pt] = egtb;
             bpieces[capture_pt]++;
         }
     }
@@ -360,20 +284,18 @@ void GenEGTB::allocate_and_load() {
         if (bpieces[PAWN] > 0) {
             bpieces[PAWN]--;
             bpieces[promote_pt]++;
-            uint64_t n = compute_num_positions(wpieces, bpieces);
-            this->WTM_TBs_NPOS[promote_pt][NO_PIECE_TYPE] = n;
-            this->WTM_TBs[promote_pt][NO_PIECE_TYPE] = load_egtb(wpieces, bpieces, folder, true);
-            std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+            EGTB* egtb = new EGTB(wpieces, bpieces); load_egtb(egtb, folder, true);
+            std::cout << "Loaded " << egtb->id << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+            this->WTM_EGTBs[promote_pt][NO_PIECE_TYPE] = egtb;
             bpieces[PAWN]++;
             bpieces[promote_pt]--;
         }
         if (wpieces[PAWN] > 0) {
             wpieces[PAWN]--;
             wpieces[promote_pt]++;
-            uint64_t n = compute_num_positions(wpieces, bpieces);
-            this->BTM_TBs_NPOS[promote_pt][NO_PIECE_TYPE] = n;
-            this->BTM_TBs[promote_pt][NO_PIECE_TYPE] = load_egtb(bpieces, wpieces, folder, true); 
-            std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+            EGTB* egtb = new EGTB(bpieces, wpieces); load_egtb(egtb, folder, true); 
+            std::cout << "Loaded " << egtb->id << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+            this->BTM_EGTBs[promote_pt][NO_PIECE_TYPE] = egtb;
             wpieces[PAWN]++;
             wpieces[promote_pt]--;
         }
@@ -386,10 +308,9 @@ void GenEGTB::allocate_and_load() {
                 wpieces[capture_pt]--;
                 bpieces[PAWN]--;
                 bpieces[promote_pt]++;
-                uint64_t n = compute_num_positions(wpieces, bpieces);
-                this->WTM_TBs_NPOS[promote_pt][capture_pt] = n;
-                this->WTM_TBs[promote_pt][capture_pt] = load_egtb(wpieces, bpieces, folder, true);
-                std::cout << "Load " << get_egtb_identifier(wpieces, bpieces) << " for white " << PieceToChar[capture_pt] << " captured with black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+                EGTB* egtb = new EGTB(wpieces, bpieces); load_egtb(egtb, folder, true);
+                std::cout << "Loaded " << egtb->id << " for white " << PieceToChar[capture_pt] << " captured with black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+                this->WTM_EGTBs[promote_pt][capture_pt] = egtb;
                 wpieces[capture_pt]++;
                 bpieces[PAWN]++;
                 bpieces[promote_pt]--;
@@ -398,10 +319,9 @@ void GenEGTB::allocate_and_load() {
                 bpieces[capture_pt]--;
                 wpieces[PAWN]--;
                 wpieces[promote_pt]++;
-                uint64_t n = compute_num_positions(wpieces, bpieces);
-                this->BTM_TBs_NPOS[promote_pt][capture_pt] = n;
-                this->BTM_TBs[promote_pt][capture_pt] = load_egtb(bpieces, wpieces, folder, true); 
-                std::cout << "Load " << get_egtb_identifier(bpieces, wpieces) << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+                EGTB* egtb = new EGTB(bpieces, wpieces); load_egtb(egtb, folder, true); 
+                std::cout << "Load " << egtb->id << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+                this->BTM_EGTBs[promote_pt][capture_pt] = egtb;
                 bpieces[capture_pt]++;
                 wpieces[PAWN]++;
                 wpieces[promote_pt]--;
@@ -413,13 +333,14 @@ void GenEGTB::allocate_and_load() {
 
 void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
     assert (!pos.sntm_in_check());
-    int16_t* TB = pos.side_to_move() == WHITE ? WTM_TB : BTM_TB;
-    int16_t* (*CAPTURE_TBs)[6] = pos.side_to_move() == WHITE ? BTM_TBs : WTM_TBs;
+    EGTB* egtb = pos.side_to_move() == WHITE ? WTM_EGTB : BTM_EGTB;
+    // EGTB* sntm_egtb = pos.side_to_move() == WHITE ? BTM_EGTB : WTM_EGTB;
+    EGTB* (*CAPTURE_TBs)[6] = pos.side_to_move() == WHITE ? BTM_EGTBs : WTM_EGTBs;
 
     if (verbose) std::cout << pos << pos.fen() << std::endl;
 
-    uint64_t ix = ix_from_pos(pos);
-    int16_t tb_val = TB[ix];
+    uint64_t ix = ix_from_pos(pos, egtb->num_nonep_pos, egtb->num_ep_pos);
+    int16_t tb_val = egtb->TB[ix];
 
     int16_t max_val = LOSS_IN(0);
     int16_t val;
@@ -427,9 +348,9 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
     for (Move move : movelist) {
         PieceType capture = pos.do_move(move);
         PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
-        uint64_t fwd_ix = ix_from_pos(pos);
-        // std::cout << PieceToChar[capture] << " - " << PieceToChar[promotion] << std::endl;
-        val = CAPTURE_TBs[promotion][capture][fwd_ix];
+        EGTB* cap_egtb = CAPTURE_TBs[promotion][capture];
+        uint64_t fwd_ix = ix_from_pos(pos, cap_egtb->num_nonep_pos, cap_egtb->num_ep_pos);
+        val = cap_egtb->TB[fwd_ix];
         if (capture) {
             if (verbose) std::cout << "  " << move_to_uci(move) << "x " << val << " at ix: " << fwd_ix << std::endl;
         } else {
@@ -462,25 +383,22 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
 }
 
 void GenEGTB::gen(int nthreads) {
-    std::cout << "Generate " << WTM_NPOS << " " << get_egtb_identifier(wpieces, bpieces) << " and " << BTM_NPOS << " " << get_egtb_identifier(bpieces, wpieces) << std::endl;
 
-    if (egtb_exists(wpieces, bpieces, folder)) {
-        std::cout << "Already exists." << std::endl;
+    if (egtb_exists(WTM_EGTB, folder) && egtb_exists(BTM_EGTB, folder)) {
+        std::cout << WTM_EGTB->id << " and " << BTM_EGTB->id << " already exist." << std::endl;
         return;
     }
+    std::cout << "Generate " << WTM_EGTB->num_pos << " " << WTM_EGTB->id << " and " << BTM_EGTB->num_pos << " " << BTM_EGTB->id << std::endl;
+
     allocate_and_load();
 
     int16_t LEVEL = 0;
 
     uint64_t N_LEVEL_POS = 0;
 
-    uint64_t LOSS_NPOS;
-    int16_t* LOSS_TB;
-    uint64_t WIN_NPOS;
-    int16_t* WIN_TB;
-    int16_t* (*LOSS_TBs)[6];
-    uint64_t (*LOSS_TBs_NPOS)[6];
-    int16_t* (*CAPTURE_TBs)[6];
+    EGTB* LOSS_EGTB;
+    EGTB* WIN_EGTB;
+    EGTB* (*CAPTURE_EGTBs)[6];
     Color LOSS_COLOR;
         
     int16_t MIN_LEVEL = 0;
@@ -489,43 +407,42 @@ void GenEGTB::gen(int nthreads) {
 
     for (int wtm = 0; wtm <= 1; ++wtm) {
         if (wtm) {
-            LOSS_NPOS = WTM_NPOS;
-            LOSS_TB = WTM_TB;
+            LOSS_EGTB = WTM_EGTB;
             LOSS_COLOR = WHITE;
-            CAPTURE_TBs = BTM_TBs;
+            CAPTURE_EGTBs = BTM_EGTBs;
         } else {
-            LOSS_NPOS = BTM_NPOS;
-            LOSS_TB = BTM_TB;
+            LOSS_EGTB = BTM_EGTB;
             LOSS_COLOR = BLACK;
-            CAPTURE_TBs = WTM_TBs;
+            CAPTURE_EGTBs = WTM_EGTBs;
         }
         uint64_t N_UNUSED = 0;
         uint64_t N_SNTM_IN_CHECK = 0;
         uint64_t N_CHECKMATE = 0;
 
         #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS) reduction(+:N_UNUSED) reduction(+:N_SNTM_IN_CHECK) reduction(+:N_CHECKMATE) reduction(max:MIN_LEVEL)
-        for (uint64_t ix = 0; ix < LOSS_NPOS; ix++) {
+        for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
             EGPosition pos;
             pos.reset();
-            pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
+            pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
             bool sntm_in_check = pos.sntm_in_check();
-            if (ix_from_pos(pos) != ix || sntm_in_check) {
-                LOSS_TB[ix] = UNUSED;
+            // TODO: check valid EP
+            if (ix_from_pos(pos, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos) != ix || sntm_in_check) {
+                LOSS_EGTB->TB[ix] = UNUSED;
                 N_UNUSED++;
                 N_SNTM_IN_CHECK += sntm_in_check;
                 continue;
             } else {
-                LOSS_TB[ix] = UNKNOWN;
+                LOSS_EGTB->TB[ix] = UNKNOWN;
             }
 
             EGMoveList movelist = EGMoveList<FORWARD>(pos);
             if (movelist.size() == 0) {
                 if (pos.stm_in_check()) {
-                    LOSS_TB[ix] = LOSS_IN(0);
+                    LOSS_EGTB->TB[ix] = LOSS_IN(0);
                     N_CHECKMATE++;
                     N_LEVEL_POS++;
                 } else {
-                    LOSS_TB[ix] = 0;
+                    LOSS_EGTB->TB[ix] = 0;
                 }
 
             } else {
@@ -540,8 +457,9 @@ void GenEGTB::gen(int nthreads) {
                         // move stays in TB, cannot determine eval
                         has_full_eval = false;
                     } else {
-                        uint64_t fwd_ix = ix_from_pos(pos);
-                        max_val = std::max(max_val, (int16_t) -CAPTURE_TBs[promotion][capture][fwd_ix]);
+                        EGTB* cap_egtb = CAPTURE_EGTBs[promotion][capture];
+                        uint64_t fwd_ix = ix_from_pos(pos, cap_egtb->num_nonep_pos, cap_egtb->num_ep_pos);
+                        max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
                         has_partial_eval = true;
                     }
                     pos.undo_move(move, capture);
@@ -559,18 +477,18 @@ void GenEGTB::gen(int nthreads) {
 
                 if (has_full_eval) {
                     // all moves lead to dependent TB (cannot be stalemate since we have moves)
-                    LOSS_TB[ix] = max_val;
+                    LOSS_EGTB->TB[ix] = max_val;
                     N_LEVEL_POS++;
                 }
                 if (has_partial_eval) {
                     if (max_val < 0) {
                         // there is at least one move that leads to a winning position for sntm
                         // max_val is the upper bound on the val when only considering moves to dependent positions
-                        LOSS_TB[ix] = MAYBELOSS_IN(max_val - LOSS_IN(0));
+                        LOSS_EGTB->TB[ix] = MAYBELOSS_IN(max_val - LOSS_IN(0));
                     }
                     if (max_val >= 0) {
                         // known win and draw can be inferred from partial eval
-                        LOSS_TB[ix] = max_val;
+                        LOSS_EGTB->TB[ix] = max_val;
                     }
                 }
             }
@@ -578,8 +496,8 @@ void GenEGTB::gen(int nthreads) {
 
         std::cout << "Stats for " << ((wtm) ? get_egtb_identifier(wpieces, bpieces) : get_egtb_identifier(bpieces, wpieces)) << ":\n";
         std::cout << "    Checkmate count: " << N_CHECKMATE << std::endl;
-        std::cout << "    " << N_UNUSED << " unused indices (" << (double) N_UNUSED / LOSS_NPOS * 100 << "%)" << std::endl;
-        std::cout << "    " << N_SNTM_IN_CHECK << " of which sntm in check (" << (double) N_SNTM_IN_CHECK / LOSS_NPOS * 100 << "%)" << std::endl;
+        std::cout << "    " << N_UNUSED << " unused indices (" << (double) N_UNUSED / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
+        std::cout << "    " << N_SNTM_IN_CHECK << " of which sntm in check (" << (double) N_SNTM_IN_CHECK / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
     }
  
     std::cout << "MIN_LEVEL = " << int(MIN_LEVEL) << std::endl;
@@ -591,31 +509,26 @@ void GenEGTB::gen(int nthreads) {
         for (int wtm = 0; wtm <= 1; ++wtm) {
             if (wtm) {
                 LOSS_COLOR = WHITE;
-                LOSS_NPOS = WTM_NPOS;
-                LOSS_TB = WTM_TB;
-                WIN_NPOS = BTM_NPOS;
-                WIN_TB = BTM_TB;
+                LOSS_EGTB = WTM_EGTB;
+                WIN_EGTB = BTM_EGTB;
             } else {
                 LOSS_COLOR = BLACK;
-                LOSS_NPOS = BTM_NPOS;
-                LOSS_TB = BTM_TB;
-                WIN_NPOS = WTM_NPOS;
-                WIN_TB = WTM_TB;
+                LOSS_EGTB = BTM_EGTB;
+                WIN_EGTB = WTM_EGTB;
             }
-            assert (LOSS_TB != WIN_TB);
 
             #pragma omp parallel for num_threads(nthreads) schedule(static,64)
-            for (uint64_t ix = 0; ix < LOSS_NPOS; ix++) {
+            for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
                 EGPosition pos;
-                if (LOSS_TB[ix] == LOSS_IN(LEVEL-1)) {
+                if (LOSS_EGTB->TB[ix] == LOSS_IN(LEVEL-1)) {
                     pos.reset();
-                    pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
+                    pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
                     assert (!pos.sntm_in_check());
                     for (Move move : EGMoveList<REVERSE>(pos)) {
                         pos.do_rev_move(move);
-                        uint64_t win_ix = ix_from_pos(pos);
-                        if (!IS_SET(WIN_TB[win_ix]) || WIN_TB[win_ix] < WIN_IN(LEVEL) ) {
-                            WIN_TB[win_ix] = WIN_IN(LEVEL);
+                        uint64_t win_ix = ix_from_pos(pos, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos);
+                        if (!IS_SET(WIN_EGTB->TB[win_ix]) || WIN_EGTB->TB[win_ix] < WIN_IN(LEVEL) ) {
+                            WIN_EGTB->TB[win_ix] = WIN_IN(LEVEL);
                         }
                         pos.undo_rev_move(move);
                     }
@@ -623,25 +536,25 @@ void GenEGTB::gen(int nthreads) {
             }
 
             #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS)
-            for (uint64_t win_ix = 0; win_ix < WIN_NPOS; win_ix++) {
-                if (WIN_TB[win_ix] == WIN_IN(LEVEL)) {
+            for (uint64_t win_ix = 0; win_ix < WIN_EGTB->num_pos; win_ix++) {
+                if (WIN_EGTB->TB[win_ix] == WIN_IN(LEVEL)) {
                     EGPosition pos;
                     pos.reset();
-                    pos_at_ix(pos, win_ix, ~LOSS_COLOR, wpieces, bpieces); // not much slower
+                    pos_at_ix(pos, win_ix, ~LOSS_COLOR, wpieces, bpieces, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos); // not much slower
                     if (pos.sntm_in_check()) {
-                        std::cout << win_ix << " " << WIN_TB[win_ix] << pos;
+                        std::cout << win_ix << " " << WIN_EGTB->TB[win_ix] << pos;
                         assert (!pos.sntm_in_check());
                     }
                     N_LEVEL_POS++;
 
                     for (Move move : EGMoveList<REVERSE>(pos)) {
                         pos.do_rev_move(move); // no capture, stay in WIN_TB / LOSS_TB config
-                        uint64_t maybe_loss_ix = ix_from_pos(pos);
-                        if (!IS_SET(LOSS_TB[maybe_loss_ix])) {
-                            if (LOSS_TB[maybe_loss_ix] == UNKNOWN) {
-                                LOSS_TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
+                        uint64_t maybe_loss_ix = ix_from_pos(pos, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
+                        if (!IS_SET(LOSS_EGTB->TB[maybe_loss_ix])) {
+                            if (LOSS_EGTB->TB[maybe_loss_ix] == UNKNOWN) {
+                                LOSS_EGTB->TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
                             } else {
-                                assert(LOSS_TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1);
+                                assert(LOSS_EGTB->TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1);
                                 // LOSS_TB[maybe_loss_ix] has to be MAYBELOSS_IN(SOME_LEVEL) where SOME_LEVEL >= LEVEL+1
                                 // if SOME_LEVEL == LEVEL+1 this is what we would have set anyways
                                 // if SOME_LEVEL > LEVEL+1 there has to be a move to dependent table which is < WIN_IN(LEVEL)
@@ -662,26 +575,23 @@ void GenEGTB::gen(int nthreads) {
         N_LEVEL_POS = 0;
         for (int wtm = 0; wtm <= 1; ++wtm) {
             if (wtm) {
-                LOSS_NPOS = WTM_NPOS;
-                LOSS_TB = WTM_TB;
+                LOSS_EGTB = WTM_EGTB;
                 LOSS_COLOR = WHITE;
-                CAPTURE_TBs = BTM_TBs;
-                WIN_TB = BTM_TB;
+                CAPTURE_EGTBs = BTM_EGTBs;
+                WIN_EGTB = BTM_EGTB;
             } else {
-                LOSS_NPOS = BTM_NPOS;
-                LOSS_TB = BTM_TB;
+                LOSS_EGTB = BTM_EGTB;
                 LOSS_COLOR = BLACK;
-                CAPTURE_TBs = WTM_TBs;
-                WIN_TB = WTM_TB;
+                CAPTURE_EGTBs = WTM_EGTBs;
+                WIN_EGTB = WTM_EGTB;
             }
-            assert (CAPTURE_TBs[NO_PIECE_TYPE][NO_PIECE_TYPE] == WIN_TB);
 
             #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS)
-            for (uint64_t ix = 0; ix < LOSS_NPOS; ix++) {
+            for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
                 EGPosition pos;
-                if (LOSS_TB[ix] == MAYBELOSS_IN(LEVEL)) {
+                if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL)) {
                     pos.reset();
-                    pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces);
+                    pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
                     assert (!pos.sntm_in_check()); // should be UNUSED_IX if sntm_in_check
 
                     // check that all forward moves lead to checkmate in <= -(LEVEL-1)
@@ -689,17 +599,17 @@ void GenEGTB::gen(int nthreads) {
                     int16_t max_val = LOSS_IN(LEVEL-1); // there is at least one move that leads to WIN_IN(LEVEL-1)
                     if (moveList.size() == 0) {
                         max_val = 0; // has to be stale mate
-                        if (LOSS_TB[ix] == MAYBELOSS_IN(LEVEL))
+                        if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL))
                             std::cout << pos << ix << std::endl;
-                        assert(LOSS_TB[ix] != MAYBELOSS_IN(LEVEL)); // cannot happen at MAYBELOSS position
+                        assert(LOSS_EGTB->TB[ix] != MAYBELOSS_IN(LEVEL)); // cannot happen at MAYBELOSS position
                     } else {
                         for (Move move : moveList) {
                             PieceType capture = pos.do_move(move);
                             PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
 
                             if (!promotion && !capture) {
-                                uint64_t fwd_ix = ix_from_pos(pos);
-                                int16_t val = WIN_TB[fwd_ix];
+                                uint64_t fwd_ix = ix_from_pos(pos, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos);
+                                int16_t val = WIN_EGTB->TB[fwd_ix];
                                 if (val == UNKNOWN) {
                                     max_val = 0;
                                 } else {
@@ -714,11 +624,11 @@ void GenEGTB::gen(int nthreads) {
                     }
                     
                     if (max_val == LOSS_IN(LEVEL-1)) {
-                        LOSS_TB[ix] = LOSS_IN(LEVEL);
+                        LOSS_EGTB->TB[ix] = LOSS_IN(LEVEL);
                         N_LEVEL_POS++;
                     } else {
                         // maybeloss can be refuted by finding non-capture non-promo move
-                        LOSS_TB[ix] = UNKNOWN;
+                        LOSS_EGTB->TB[ix] = UNKNOWN;
                     }
                     
                 }
@@ -731,14 +641,14 @@ void GenEGTB::gen(int nthreads) {
     }
 
 
-    uint64_t MAX_NPOS = std::max(WTM_NPOS, BTM_NPOS);
+    uint64_t MAX_NPOS = std::max(WTM_EGTB->num_pos, BTM_EGTB->num_pos);
     #pragma omp parallel for num_threads(nthreads) schedule(static,64)
     for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
         // all entries that are not known wins or losses are draws
-        if (ix < WTM_NPOS && (WTM_TB[ix] == UNKNOWN || WTM_TB[ix] == UNUSED)) WTM_TB[ix] = 0;
-        if (ix < BTM_NPOS && (BTM_TB[ix] == UNKNOWN || BTM_TB[ix] == UNUSED)) BTM_TB[ix] = 0;
-        if (ix < WTM_NPOS) assert (IS_SET(WTM_TB[ix]));
-        if (ix < BTM_NPOS) assert (IS_SET(BTM_TB[ix]));
+        if (ix < WTM_EGTB->num_pos && (WTM_EGTB->TB[ix] == UNKNOWN || WTM_EGTB->TB[ix] == UNUSED)) WTM_EGTB->TB[ix] = 0;
+        if (ix < BTM_EGTB->num_pos && (BTM_EGTB->TB[ix] == UNKNOWN || BTM_EGTB->TB[ix] == UNUSED)) BTM_EGTB->TB[ix] = 0;
+        if (ix < WTM_EGTB->num_pos) assert (IS_SET(WTM_EGTB->TB[ix]));
+        if (ix < BTM_EGTB->num_pos) assert (IS_SET(BTM_EGTB->TB[ix]));
     }
 
     TimePoint t1 = now();
@@ -752,16 +662,16 @@ void GenEGTB::gen(int nthreads) {
         #pragma omp parallel for num_threads(nthreads) schedule(static,64)
         for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
             EGPosition pos;
-            if ((ix < WTM_NPOS) && (WTM_TB[ix] == LOSS_IN(LEVEL) || WTM_TB[ix] == WIN_IN(LEVEL))) {
+            if ((ix < WTM_EGTB->num_pos) && (WTM_EGTB->TB[ix] == LOSS_IN(LEVEL) || WTM_EGTB->TB[ix] == WIN_IN(LEVEL))) {
                 pos.reset();
-                pos_at_ix(pos, ix, WHITE, wpieces, bpieces);
+                pos_at_ix(pos, ix, WHITE, wpieces, bpieces, WTM_EGTB->num_nonep_pos, WTM_EGTB->num_ep_pos);
                 assert (!pos.sntm_in_check());
                 check_consistency(pos, false);
                 N_LEVEL_POS++;
             }
-            if ((ix < BTM_NPOS) && (BTM_TB[ix] == LOSS_IN(LEVEL) || BTM_TB[ix] == WIN_IN(LEVEL))) {
+            if ((ix < BTM_EGTB->num_pos) && (BTM_EGTB->TB[ix] == LOSS_IN(LEVEL) || BTM_EGTB->TB[ix] == WIN_IN(LEVEL))) {
                 pos.reset();
-                pos_at_ix(pos, ix, BLACK, wpieces, bpieces);
+                pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
                 assert (!pos.sntm_in_check());
                 check_consistency(pos, false);
                 N_LEVEL_POS++;
@@ -777,15 +687,15 @@ void GenEGTB::gen(int nthreads) {
     #pragma omp parallel for num_threads(nthreads) schedule(static,64)
     for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
         EGPosition pos;
-        if (ix < WTM_NPOS && WTM_TB[ix] == 0) {
+        if (ix < WTM_EGTB->num_pos && WTM_EGTB->TB[ix] == 0) {
             pos.reset();
-            pos_at_ix(pos, ix, WHITE, wpieces, bpieces);
+            pos_at_ix(pos, ix, WHITE, wpieces, bpieces, WTM_EGTB->num_nonep_pos, WTM_EGTB->num_ep_pos);
             if (pos.sntm_in_check()) continue;
             check_consistency(pos, false);
         }
-        if (ix < BTM_NPOS && BTM_TB[ix] == 0) {
+        if (ix < BTM_EGTB->num_pos && BTM_EGTB->TB[ix] == 0) {
             pos.reset();
-            pos_at_ix(pos, ix, BLACK, wpieces, bpieces);
+            pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
             if (pos.sntm_in_check()) continue;
             check_consistency(pos, false);
         }
@@ -794,28 +704,26 @@ void GenEGTB::gen(int nthreads) {
 
 
     for (int wtm = 0; wtm <= 1; ++wtm) {
-        int16_t* _TB = wtm ? WTM_TB : BTM_TB;
-        uint64_t _NPOS = wtm ? WTM_NPOS : BTM_NPOS;
-        std::string egtb = wtm ? get_egtb_identifier(wpieces, bpieces) : get_egtb_identifier(bpieces, wpieces);
+        EGTB* egtb = wtm ? WTM_EGTB : BTM_EGTB;
 
         uint64_t wins = 0;
         uint64_t draws = 0;
         uint64_t losses = 0;
         #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:wins) reduction(+:draws) reduction(+:losses)
-        for (uint64_t ix = 0; ix < _NPOS; ix++) {
-            if (_TB[ix] == UNUSED) { continue; }
-            wins += (_TB[ix] > 0);
-            draws += (_TB[ix] == 0);
-            losses += (_TB[ix] < 0);
+        for (uint64_t ix = 0; ix < egtb->num_pos; ix++) {
+            if (egtb->TB[ix] == UNUSED) { continue; }
+            wins += (egtb->TB[ix] > 0);
+            draws += (egtb->TB[ix] == 0);
+            losses += (egtb->TB[ix] < 0);
         }
-        std::cout << wins << " wins in " << egtb << std::endl;
-        std::cout << draws << " draws in " << egtb << std::endl;
-        std::cout << losses << " losses in " << egtb << std::endl;
+        std::cout << wins << " wins in " << egtb->id << std::endl;
+        std::cout << draws << " draws in " << egtb->id << std::endl;
+        std::cout << losses << " losses in " << egtb->id << std::endl;
     }
 
-    store_egtb(WTM_TB, wpieces, bpieces, folder);
-    store_egtb(BTM_TB, bpieces, wpieces, folder);
-    std::cout << "Stored " << get_egtb_identifier(wpieces, bpieces) << " and " << get_egtb_identifier(bpieces, wpieces) << std::endl;
+    store_egtb(WTM_EGTB, folder);
+    store_egtb(BTM_EGTB, folder);
+    std::cout << "Stored " << WTM_EGTB->id << " and " << BTM_EGTB->id << std::endl;
 }
 
 #endif

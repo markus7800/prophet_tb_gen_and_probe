@@ -7,6 +7,114 @@
 #include "uci.h"
 #include "triangular_indexes.h"
 
+
+uint64_t compute_num_nonep_positions(const int stm_pieces[6], const int sntm_pieces[6]) {
+    int n_pawns = stm_pieces[PAWN] + sntm_pieces[PAWN];
+    if (n_pawns == 0) {
+        uint64_t n = N_KKX;
+        uint64_t s = 62;
+        
+        for (int stm = 0; stm <= 1; ++stm) {
+            const int* pieces = (stm) ? stm_pieces : sntm_pieces;
+            for (PieceType i = KNIGHT; i < KING; ++i) {
+                n *= number_of_ordered_tuples(s, pieces[i]);
+                s -= pieces[i];
+            }
+        }
+
+        return n;
+
+    } else {
+        uint64_t n = 1;
+        uint64_t s = 64;
+
+        // pawns
+        uint64_t sp = 48;
+        bool first_pawn = true;
+        if (sntm_pieces[PAWN] > 0) {
+            n *= number_of_ordered_tuples_with_first_pawn(sntm_pieces[PAWN]);
+            s -= sntm_pieces[PAWN];
+            sp -= sntm_pieces[PAWN];
+            first_pawn = false;
+        }
+        if (stm_pieces[PAWN] > 0) {
+            if (first_pawn) {
+                n *= number_of_ordered_tuples_with_first_pawn(stm_pieces[PAWN]);
+            } else {
+                n *= number_of_ordered_tuples(sp, stm_pieces[PAWN]);
+            }
+            s -= stm_pieces[PAWN];
+        }
+
+
+        // kings
+        n *= s;
+        s--;
+        n *= s;
+        s--;
+
+        for (int stm = 0; stm <= 1; ++stm) {
+            const int* pieces = (stm) ? stm_pieces : sntm_pieces;
+            for (PieceType i = KNIGHT; i < KING; ++i) {
+                n *= number_of_ordered_tuples(s, pieces[i]);
+                s -= pieces[i];
+            }
+        }
+
+        return n;
+    }
+}
+
+
+uint64_t compute_num_ep_positions(const int stm_pieces[6], const int sntm_pieces[6]) {
+    if ( stm_pieces[PAWN] == 0 || sntm_pieces[PAWN] == 0) {
+        return 0;
+
+    } else {
+        uint64_t n = 7;
+        uint64_t s = 64;
+
+        // pawns
+        uint64_t sp = 46;
+        n *= number_of_ordered_tuples(sp, sntm_pieces[PAWN] - 1);
+        s -= sntm_pieces[PAWN];
+        n *= number_of_ordered_tuples(sp, stm_pieces[PAWN] - 1);
+        s -= stm_pieces[PAWN];
+        
+
+        // kings
+        n *= s;
+        s--;
+        n *= s;
+        s--;
+
+        for (int stm = 0; stm <= 1; ++stm) {
+            const int* pieces = (stm) ? stm_pieces : sntm_pieces;
+            for (PieceType i = KNIGHT; i < KING; ++i) {
+                n *= number_of_ordered_tuples(s, pieces[i]);
+                s -= pieces[i];
+            }
+        }
+
+        return n;
+    }
+}
+
+uint64_t compute_num_positions(const int stm_pieces[6], const int sntm_pieces[6]) {
+    return compute_num_ep_positions(stm_pieces, sntm_pieces) + compute_num_nonep_positions(stm_pieces, sntm_pieces);
+}
+
+                            // {    0,     1,     2,     3,     4,     5,     6};
+const Square EP_PAWN[7]      = {SQ_A5, SQ_B5, SQ_B5, SQ_C5, SQ_C5, SQ_D5, SQ_D5};
+const Square EP_CAP_PAWN[7]  = {SQ_B5, SQ_A5, SQ_C5, SQ_B5, SQ_D5, SQ_C5, SQ_E5};
+
+const uint64_t EP_IX[4][3] = {
+    {0, 0, 0}, // SQ_A5
+    {1, 0, 2}, // SQ_B5
+    {3, 0, 4}, // SQ_C5
+    {5, 0, 6}, // SQ_D5
+};
+
 void insert_increment_sq(Square occupied_sqs[6], int& n_occupied_sqs, Square& sq) {
     int k = 0;
     for (int j = 0; j < n_occupied_sqs; j++) {
@@ -100,7 +208,7 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
     }
 }
 
-void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6]) {
+void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6], uint64_t num_nonep_pos) {
     assert (wpieces[PAWN] + bpieces[PAWN] > 0);
     pos.set_side_to_move(stm);
 
@@ -116,6 +224,16 @@ void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
     Color STM[12] =        {~stm,  stm, ~stm,  ~stm, ~stm,   ~stm,   ~stm,  stm,   stm,  stm,    stm,    stm};
     PieceType PIECES[12] = {PAWN, PAWN, KING, QUEEN, ROOK, BISHOP, KNIGHT, KING, QUEEN, ROOK, BISHOP, KNIGHT};
 
+    bool EP = false;
+    /*
+    bool EP = ix > num_nonep_pos;
+    uint64_t ep_ix = ix % 7;
+    ix = ix / 7;
+    pos.put_piece(make_piece(~stm, PAWN), EP_PAWN[ep_ix]);
+    pos.put_piece(make_piece(stm, PAWN), EP_CAP_PAWN[ep_ix]);
+    pos.set_ep_square(EP_PAWN[ep_ix] + NORTH);
+    */
+
     for (int j = 0; j < 12; j++) {
         Color c = STM[j];
         PieceType p = PIECES[j];
@@ -123,7 +241,7 @@ void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
         if (p == KING)
             piece_counts[i] = 1;
         else
-            piece_counts[i] = c_pieces[p];
+            piece_counts[i] = c_pieces[p] - (EP && p == PAWN);
         if (piece_counts[i] == 0) { continue; }
         pieces[i] = make_piece(c, p);
         i++;
@@ -185,9 +303,10 @@ void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
     }
 }
 
-void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6]) {
+void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6], uint64_t num_nonep_pos, uint64_t num_ep_pos) {
+    assert (ix < num_nonep_pos + num_ep_pos);
     if (wpieces[PAWN] + bpieces[PAWN] > 0) {
-        pos_at_ix_kkp(pos, ix, stm, wpieces, bpieces);
+        pos_at_ix_kkp(pos, ix, stm, wpieces, bpieces, num_nonep_pos);
     } else {
         pos_at_ix_kkx(pos, ix, stm, wpieces, bpieces);
     }
@@ -337,7 +456,7 @@ inline Bitboard maybe_update_flip_and_transform_bb(Bitboard piecesBB, bool& is_h
     }
 }
 
-uint64_t ix_from_pos_kkp(EGPosition const &pos) {
+uint64_t ix_from_pos_kkp(EGPosition const &pos, uint64_t num_nonep_pos) {
     assert (pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK) > 0);
     Color stm = pos.side_to_move();
 
@@ -355,10 +474,42 @@ uint64_t ix_from_pos_kkp(EGPosition const &pos) {
     uint64_t n_available_squares = 64;
     int n_occupied_sqs = 0;
 
+    bool EP = pos.ep_square() != SQ_NONE;
+    Square ep_cap_pawn;
+    if (EP) {
+        /*
+        ix += num_nonep_pos;
+
+
+        Square ep_sq = pos.ep_square() ^ flip;
+        if (ep_sq >= SQ_E5) {
+            flip ^= 7;
+            ep_sq = ep_sq ^ 7;
+            is_horizontal_symmetric = false;
+        }
+        Bitboard pieceBB = pos.pieces(stm, PAWN);
+        assert (pieceBB);
+        Bitboard transformed_bb = maybe_update_flip_and_transform_bb(pieceBB, is_horizontal_symmetric, flip) & attacks_bb<PAWN>(ep_sq, ~stm);
+        ep_cap_pawn = pop_lsb(transformed_bb);
+
+        uint64_t ep_ix = EP_IX[ep_sq - SQ_A5][ep_cap_pawn - ep_sq + 1];
+        ix += ep_ix;
+        multiplier *= 7;
+
+        first_pawn = false;
+        n_available_pawn_squares -= 2,
+        n_available_squares -= 2;
+        occupied_sqs[0] = pos.ep_square() + NORTH;
+        occupied_sqs[1] = ep_cap_pawn;
+        n_occupied_sqs += 2;
+        */
+    }
+
     for (Color c: {~stm, stm}) {
         Bitboard pieceBB = pos.pieces(c, PAWN);
         if (pieceBB) {
             Bitboard transformed_bb = maybe_update_flip_and_transform_bb(pieceBB, is_horizontal_symmetric, flip);
+            if (EP) transformed_bb = transformed_bb & ~(square_bb(pos.ep_square() + NORTH) | square_bb(ep_cap_pawn));
             int n_sq_ixs = 0;
             int piece_count = 0;
             while (transformed_bb) {
@@ -420,11 +571,15 @@ uint64_t ix_from_pos_kkp(EGPosition const &pos) {
     return ix;
 }
 
-uint64_t ix_from_pos(EGPosition const &pos) {
+uint64_t ix_from_pos(EGPosition const &pos, uint64_t num_nonep_pos, uint64_t num_ep_pos) {
     if (pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK) > 0) {
-        return ix_from_pos_kkp(pos);
+        uint64_t ix = ix_from_pos_kkp(pos, num_nonep_pos);
+        assert (ix < num_nonep_pos + num_ep_pos);
+        return ix;
     } else {
-        return ix_from_pos_kkx(pos);
+        uint64_t ix = ix_from_pos_kkx(pos);
+        assert (ix < num_nonep_pos + num_ep_pos);
+        return ix;
     }
 }
 

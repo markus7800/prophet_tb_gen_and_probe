@@ -71,6 +71,8 @@ public:
     void reset();
 
     Square ep_square() const;
+    void set_ep_square(Square sq);
+    bool check_ep(Square ep_sq) const;
 
 
 private:
@@ -207,6 +209,39 @@ inline void EGPosition::move_piece(Square from, Square to) {
     board[to]   = pc;
 }
 
+inline bool EGPosition::check_ep(Square ep_sq) const {
+    Color  us       = sideToMove;
+    Color  them     = ~us;
+    Square to = ep_sq + pawn_push(us);
+
+    Bitboard pawns = attacks_bb<PAWN>(ep_sq, us) & pieces(them, PAWN);
+    if (!pawns)
+        return false;
+
+    if (checkers(us) & ~square_bb(to))
+        return false;
+
+    if (more_than_one(pawns)) {
+        if (!more_than_one(blockers_for_king(them) & pawns)) {
+            return true;
+        }
+        if (!(file_bb(square<KING>(them)) & pawns))
+            return false;
+
+        pawns &= ~file_bb(square<KING>(them));
+    }
+
+    Square   ksq      = square<KING>(them);
+    Square   capsq    = to;
+    Bitboard occupied = (pieces() ^ lsb(pawns) ^ capsq) | (ep_sq);
+
+    // If our king is not attacked after making the move, ep is legal.
+    if (!(attacks_bb<ROOK>(ksq, occupied) & pieces(us, QUEEN, ROOK))
+        && !(attacks_bb<BISHOP>(ksq, occupied) & pieces(us, QUEEN, BISHOP)))
+        return true;
+
+    return false;
+}
 
 inline PieceType EGPosition::do_move(Move m) {
     Square from     = m.from_sq();
@@ -227,35 +262,8 @@ inline PieceType EGPosition::do_move(Move m) {
 
     if (type_of(pc) == PAWN){
         bool checkEP = ((int(to) ^ int(from)) == 16);
-        while (checkEP) {
-            Bitboard pawns = attacks_bb<PAWN>(to - pawn_push(us), us) & pieces(them, PAWN);
-            if (!pawns)
-                break;
-
-            if (checkers(us) & ~square_bb(to))
-                break;
-
-            if (more_than_one(pawns)) {
-                if (!more_than_one(blockers_for_king(them) & pawns)) {
-                    epSquare = to - pawn_push(us);
-                    break;
-                }
-                if (!(file_bb(square<KING>(them)) & pawns))
-                    break;
-
-                pawns &= ~file_bb(square<KING>(them));
-            }
-
-            Square   ksq      = square<KING>(them);
-            Square   capsq    = to;
-            Bitboard occupied = (pieces() ^ lsb(pawns) ^ capsq) | (to - pawn_push(us));
-
-            // If our king is not attacked after making the move, ep is legal.
-            if (!(attacks_bb<ROOK>(ksq, occupied) & pieces(us, QUEEN, ROOK))
-                && !(attacks_bb<BISHOP>(ksq, occupied) & pieces(us, QUEEN, BISHOP)))
-                epSquare = to - pawn_push(us);
-
-            break;
+        if (checkEP && check_ep(to - pawn_push(us))) {
+            epSquare = to - pawn_push(us);
         }
     }
 
@@ -299,6 +307,7 @@ inline void EGPosition::undo_rev_move(Move m) {
 inline Color EGPosition::side_to_move() const { return sideToMove; }
 
 inline Square EGPosition::ep_square() const { return epSquare; }
+inline void EGPosition::set_ep_square(Square sq) { epSquare = sq; }
 
 inline void EGPosition::set_side_to_move(Color c) { sideToMove = c; }
 
