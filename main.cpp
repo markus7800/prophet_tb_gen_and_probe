@@ -222,11 +222,12 @@ int main(int argc, char *argv[]) {
     init_kkx_table();
     init_tril();
     // test_index();
-    test_ep_index();
-    exit(0);
+    // test_ep_index();
+    // exit(0);
 
 
     EGPosition pos;
+    /*
     pos.reset();
     pos.put_piece(W_KING, SQ_A1);
     pos.put_piece(B_KING, SQ_H1);
@@ -237,16 +238,36 @@ int main(int argc, char *argv[]) {
     pos.put_piece(B_PAWN, SQ_D4);
     pos.put_piece(B_PAWN, SQ_F4);
 
-    pos.do_move(Move(SQ_A2, SQ_A4)); // one pe
-    // pos.do_move(Move(SQ_E2, SQ_E4)); // two ep
+    // pos.do_move(Move(SQ_A2, SQ_A4)); // one pe
+    pos.do_move(Move(SQ_E2, SQ_E4)); // two ep
     // pos.do_move(Move(SQ_H2, SQ_H4)); // no ep
 
     std::cout << pos;
+    std::cout << "Forward moves:\n";
     for (Move m: EGMoveList<FORWARD>(pos)) {
         std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
-    }
+    }*/
 
-    exit(0);
+
+    /*
+    pos.reset();
+    pos.put_piece(W_KING, SQ_A1);
+    pos.put_piece(B_KING, SQ_H1);
+    pos.put_piece(W_PAWN, SQ_A4);
+    pos.put_piece(W_PAWN, SQ_E4);
+    pos.put_piece(W_PAWN, SQ_H4);
+    pos.put_piece(B_PAWN, SQ_B4);
+    pos.put_piece(B_PAWN, SQ_D4);
+    pos.put_piece(B_PAWN, SQ_F4);
+    pos.set_side_to_move(BLACK);
+
+    std::cout << pos;
+    std::cout << "Reverse moves:\n";
+    for (Move m: EGMoveList<REVERSE>(pos)) {
+        std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
+    }*/
+
+    //exit(0);
 
     assert (argc > 0);
     int nthreads = atoi(argv[1]);
@@ -254,14 +275,18 @@ int main(int argc, char *argv[]) {
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
 
-    // pieces1 = {0, 1, 0, 0, 0, 0};
-    // pieces2 = {0, 0, 0, 0, 1, 0};
-    // EGPosition pos;
+    // pieces1 = {0, 1, 1, 0, 0, 0};
+    // pieces2 = {0, 1, 0, 0, 0, 0};
+    // EGTB _egtb = EGTB(&pieces1[0], &pieces2[0]);
     // pos.reset();
-    // // pos_at_ix(pos, 1, WHITE, &pieces1[0], &pieces2[0]);
-    // pos_at_ix(pos, 1, BLACK, &pieces2[0], &pieces1[0]);
-    // uint64_t ix = ix_from_pos(pos);
-    // std::cout << pos << ix << std::endl;
+    // pos_at_ix(pos, 257392654, BLACK, &pieces1[0], &pieces2[0], _egtb.num_nonep_pos, _egtb.num_ep_pos);
+    // std::cout << pos << std::endl;
+    // uint64_t ix = ix_from_pos(pos, _egtb.num_nonep_pos, _egtb.num_ep_pos);
+    // std::cout << ix << std::endl;
+    // for (Move move : EGMoveList<REVERSE>(pos)) {
+    //     std::cout << move_to_uci(move) << std::endl;
+    // }
+    // exit(0);
 
     
     /*
@@ -306,13 +331,14 @@ int main(int argc, char *argv[]) {
     // EGPosition pos;
     int16_t longest_overall_mate = WIN_IN(0) + 1;
     std::string longest_overall_mate_str;
+    bool check_longest_mate = true;
 
     std::unordered_set<std::string> egtbs = {};
     
     uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
-    for (int piece_count = 0; piece_count <= 2; piece_count++) {
+    for (int piece_count = 0; piece_count <= 3; piece_count++) {
         for (int pawn_count = 0; pawn_count <= piece_count; pawn_count++ ) {
             for (Piece p1 : PIECES_ARR) {
                 for (Piece p2 : PIECES_ARR) {
@@ -338,51 +364,53 @@ int main(int argc, char *argv[]) {
                             g->gen(nthreads);
                             g->~GenEGTB();
 
-                            std::cout << id << ": ";
-                            
-                            EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
-                            load_egtb(&egtb, "egtbs/", true);
+                            if (check_longest_mate) {
+                                std::cout << id << ": ";
+                                
+                                EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
+                                load_egtb(&egtb, "egtbs/", true);
 
-                            int16_t longest_mate = WIN_IN(0) + 1;
-                            uint64_t longest_mate_ix = 0;
-                            uint64_t unused_count = 0;
-                            total_poscount += egtb.num_pos;
-                            for (uint64_t win_ix = 0; win_ix < egtb.num_pos; win_ix++) {
-                                int16_t val = egtb.TB[win_ix];
-                                assert (IS_SET(val));
-                                if (val == 0) {
-                                    val_count[0]++;
+                                int16_t longest_mate = WIN_IN(0) + 1;
+                                uint64_t longest_mate_ix = 0;
+                                uint64_t unused_count = 0;
+                                total_poscount += egtb.num_pos;
+                                for (uint64_t win_ix = 0; win_ix < egtb.num_pos; win_ix++) {
+                                    int16_t val = egtb.TB[win_ix];
+                                    assert (IS_SET(val));
+                                    if (val == 0) {
+                                        val_count[0]++;
+                                    } else {
+                                        val_count[WIN_IN(0) - abs(val) + 1]++;
+                                    }
+                                    if (0 < val && val < longest_mate) {
+                                        longest_mate = val;
+                                        longest_mate_ix = win_ix;
+                                    }
+                                }
+
+                                if (longest_mate == WIN_IN(0) + 1) {
+                                    std::cout << "no win." << std::endl;
                                 } else {
-                                    val_count[WIN_IN(0) - abs(val) + 1]++;
-                                }
-                                if (0 < val && val < longest_mate) {
-                                    longest_mate = val;
-                                    longest_mate_ix = win_ix;
-                                }
-                            }
+                                    pos.reset();
+                                    pos_at_ix(pos, longest_mate_ix, WHITE, &pieces1[0], &pieces2[0], egtb.num_nonep_pos, egtb.num_nonep_pos);
+                                    std::cout << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
+                                    if (longest_mate < longest_overall_mate) {
+                                        longest_overall_mate = longest_mate;
+                                        std::cout << "*";
 
-                            if (longest_mate == WIN_IN(0) + 1) {
-                                std::cout << "no win." << std::endl;
-                            } else {
-                                pos.reset();
-                                pos_at_ix(pos, longest_mate_ix, WHITE, &pieces1[0], &pieces2[0], egtb.num_nonep_pos, egtb.num_nonep_pos);
-                                std::cout << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
-                                if (longest_mate < longest_overall_mate) {
-                                    longest_overall_mate = longest_mate;
-                                    std::cout << "*";
-
-                                    std::ostringstream oss;
-                                    oss << get_egtb_identifier(&pieces1[0], &pieces2[0]) << ": " << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
-                                    longest_overall_mate_str = oss.str();
+                                        std::ostringstream oss;
+                                        oss << get_egtb_identifier(&pieces1[0], &pieces2[0]) << ": " << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
+                                        longest_overall_mate_str = oss.str();
+                                    }
+                                    std::cout << std::endl;
                                 }
-                                std::cout << std::endl;
-                            }
-                            std::cout << "#unused " << unused_count << " (" << (double) unused_count / egtb.num_pos * 100 << "%)" << std::endl;
+                                std::cout << "#unused " << unused_count << " (" << (double) unused_count / egtb.num_pos * 100 << "%)" << std::endl;
 
-                            if (!egtb_exists(&egtb, "egtbs8/")) {
-                                store_egtb_8bit(&egtb, "egtbs8/");
+                                if (!egtb_exists(&egtb, "egtbs8/")) {
+                                    store_egtb_8bit(&egtb, "egtbs8/");
+                                }
+                                free_egtb(&egtb);
                             }
-                            free_egtb(&egtb);
                         }
 
                         if (p1 != NO_PIECE) unplace_piece(p1, &pieces1[0], &pieces2[0]);

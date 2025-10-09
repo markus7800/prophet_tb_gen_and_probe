@@ -300,10 +300,21 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType capture
     Square our_ksq = pos.square<KING>(us);
     Square their_ksq = pos.square<KING>(~us);
 
-    if (!promotion)
-        moveList = (us == WHITE) ? generate_all_rev<WHITE, REVERSE>(pos, moveList, captured) : generate_all_rev<BLACK, REVERSE>(pos, moveList, captured);
-    else
-        moveList = (us == WHITE) ? generate_promotions_rev<WHITE, REVERSE>(pos, moveList, captured, promotion) : generate_promotions_rev<BLACK, REVERSE>(pos, moveList, captured, promotion);
+    if (pos.ep_square() != SQ_NONE) {
+        assert (!captured);
+        if (pos.ep_square() & Rank3BB) {
+            if (pos.piece_on(pos.ep_square() + SOUTH) == NO_PIECE)
+                *moveList++ = Move(pos.ep_square() + SOUTH, pos.ep_square() + NORTH);
+        } else {
+            if (pos.piece_on(pos.ep_square() + NORTH) == NO_PIECE)
+                *moveList++ = Move(pos.ep_square() + NORTH, pos.ep_square() + SOUTH);
+        }
+    } else {
+        if (!promotion)
+            moveList = (us == WHITE) ? generate_all_rev<WHITE, REVERSE>(pos, moveList, captured) : generate_all_rev<BLACK, REVERSE>(pos, moveList, captured);
+        else
+            moveList = (us == WHITE) ? generate_promotions_rev<WHITE, REVERSE>(pos, moveList, captured, promotion) : generate_promotions_rev<BLACK, REVERSE>(pos, moveList, captured, promotion);
+    }
 
     
     Bitboard byTypeBB[PIECE_TYPE_NB];
@@ -347,6 +358,9 @@ Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType capture
             *cur = *(--moveList);
         } else if (to != our_ksq && more_than_one(attackers_to_after_moving_piece(our_ksq, byTypeBB, byColorBB) & byColorBB[~us])) {
             // if our king is in double check after reversing move, only legal moves are king moves
+            *cur = *(--moveList);
+        } else if (pt == PAWN && (pos.ep_square() == SQ_NONE) && (int(to) ^ int(from)) == 16 && pos.check_ep(to - pawn_push(us))) {
+            // if there is no ep_square then double pawn pushes are only allowed if they do not allow ep
             *cur = *(--moveList);
         } else {
             ++cur;

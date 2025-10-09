@@ -231,13 +231,19 @@ void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
         ix -= num_nonep_pos;
         uint64_t ep_ix = ix % 7;
         ix = ix / 7;
-        Square ep_pawn = EP_PAWN[ep_ix] ^ flip;
-        Square ep_cap_pawn = EP_CAP_PAWN[ep_ix] ^ flip;
-        pos.put_piece(make_piece(~stm, PAWN), ep_pawn);
-        pos.put_piece(make_piece(stm, PAWN), ep_cap_pawn);
+        Square ep_pawn = EP_PAWN[ep_ix];
+        Square ep_cap_pawn = EP_CAP_PAWN[ep_ix];
+        pos.put_piece(make_piece(~stm, PAWN), ep_pawn ^ flip);
+        pos.put_piece(make_piece(stm, PAWN), ep_cap_pawn ^ flip);
         pos.set_ep_square((EP_PAWN[ep_ix] + NORTH) ^ flip);
-        occupied_sqs[0] = ep_pawn;
-        occupied_sqs[1] = ep_cap_pawn;
+
+        if (ep_pawn < ep_cap_pawn) {
+            occupied_sqs[0] = ep_pawn;
+            occupied_sqs[1] = ep_cap_pawn;
+        } else {
+            occupied_sqs[0] = ep_cap_pawn;
+            occupied_sqs[1] = ep_pawn;
+        }
         n_occupied_sqs += 2;
         // std::cout << "ep_ix: " << ep_ix << ", ep_pawn_sq: " << square_to_uci(ep_pawn) << ", ep_cap_pawn: " << square_to_uci(ep_cap_pawn) << std::endl;
     }

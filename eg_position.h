@@ -11,6 +11,14 @@
 #include "uci.h"
 
 
+struct UndoInfo {
+    PieceType captured;
+    Square epSquare;
+    UndoInfo(PieceType captured, Square epSquare) {
+        this->captured = captured;
+        this->epSquare = epSquare;
+    }
+};
 
 // no castling
 class EGPosition {
@@ -56,10 +64,10 @@ public:
 
     std::string fen() const;
 
-    PieceType do_move(Move m);
-    void undo_move(Move m, PieceType captured);
+    UndoInfo do_move(Move m);
+    void undo_move(Move m, UndoInfo u);
 
-    void do_rev_move(Move m, PieceType captured = NO_PIECE_TYPE);
+    void do_rev_move(Move m, UndoInfo u = UndoInfo(NO_PIECE_TYPE, SQ_NONE));
     void undo_rev_move(Move m);
 
     // int& get_wpiece_count() const;
@@ -73,6 +81,7 @@ public:
     Square ep_square() const;
     void set_ep_square(Square sq);
     bool check_ep(Square ep_sq) const;
+    Bitboard ep_candidates() const;
 
 
 private:
@@ -209,14 +218,26 @@ inline void EGPosition::move_piece(Square from, Square to) {
     board[to]   = pc;
 }
 
+inline Bitboard EGPosition::ep_candidates() const {
+    if (sideToMove == WHITE)
+        return shift<NORTH>(pieces(BLACK, PAWN) & Rank5BB) & ~pieces();
+    else
+        return shift<SOUTH>(pieces(WHITE, PAWN) & Rank4BB) & ~pieces();
+}
 inline bool EGPosition::check_ep(Square ep_sq) const {
     Color  us       = ~sideToMove;
     Color  them     = ~us;
+    Square from = ep_sq - pawn_push(us);
     Square to = ep_sq + pawn_push(us);
 
     if (piece_on(to) != make_piece(us, PAWN)) {
         return false;
     }
+    
+    if (piece_on(ep_sq) || piece_on(from)) {
+        return false;
+    }
+
 
     Bitboard pawns = attacks_bb<PAWN>(ep_sq, us) & pieces(them, PAWN);
     if (!pawns)
@@ -247,13 +268,16 @@ inline bool EGPosition::check_ep(Square ep_sq) const {
     return false;
 }
 
-inline PieceType EGPosition::do_move(Move m) {
+
+inline UndoInfo EGPosition::do_move(Move m) {
     Square from     = m.from_sq();
     Square to       = m.to_sq();
     Piece  pc       = piece_on(from);
     Color  us       = sideToMove;
     Color  them     = ~us;
     Piece  captured = m.type_of() == EN_PASSANT ? make_piece(them, PAWN) : piece_on(to);
+    Square old_epSquare = epSquare;
+    epSquare = SQ_NONE;
     if (captured) {
         Square capsq = (m.type_of() == EN_PASSANT) ? to - pawn_push(us) : to;
         remove_piece(capsq);
@@ -274,10 +298,10 @@ inline PieceType EGPosition::do_move(Move m) {
     }
 
 
-    return type_of(captured);
+    return UndoInfo(type_of(captured), old_epSquare);
 }
 
-inline void EGPosition::undo_move(Move m, PieceType captured) {
+inline void EGPosition::undo_move(Move m, UndoInfo u) {
     Square from     = m.from_sq();
     Square to       = m.to_sq();
 
@@ -290,19 +314,18 @@ inline void EGPosition::undo_move(Move m, PieceType captured) {
         put_piece(make_piece(us,PAWN), to);
     }
     move_piece(to, from);
-    epSquare = SQ_NONE;
-    if (captured) {
+    epSquare = u.epSquare;
+    if (u.captured) {
         Square capsq = to;
         if (m.type_of() == EN_PASSANT) {
             capsq -= pawn_push(us);
-            epSquare = capsq;
         }
-        put_piece(make_piece(~us, captured), capsq);
+        put_piece(make_piece(~us, u.captured), capsq);
     }
 }
 
-inline void EGPosition::do_rev_move(Move m, PieceType captured) {
-    undo_move(m, captured);
+inline void EGPosition::do_rev_move(Move m, UndoInfo u) {
+    undo_move(m, u);
 }
 
 inline void EGPosition::undo_rev_move(Move m) {
