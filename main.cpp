@@ -20,8 +20,8 @@
 void test_index() {
 
     // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
-    int wpieces[6] = {0, 1, 0, 0, 0, 0};
-    int bpieces[6] = {0, 1, 0, 0, 0, 0};
+    int wpieces[6] = {0, 0, 0, 0, 0, 0};
+    int bpieces[6] = {0, 2, 0, 0, 0, 0};
 
     uint64_t count = 0;
     for (Color stm: {WHITE, BLACK}) {
@@ -207,6 +207,43 @@ void test_ep_index() {
     std::cout << "Checked " << count << " ep positions" << std::endl;
 }
 
+void test_pawn_index() {
+
+    // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
+    int wpieces[6] = {0, 2, 0, 0, 0, 0};
+    int bpieces[6] = {0, 0, 0, 0, 0, 0};
+
+
+    uint64_t count = 0;
+    uint64_t unused = 0;
+
+    for (Color stm: {WHITE, BLACK}) {
+        EGTB egtb = stm == WHITE ? EGTB(wpieces, bpieces) : EGTB(bpieces, wpieces);
+
+        EGPosition pos;
+
+        for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
+            pos.reset();
+            pos_at_ix(pos, ix, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
+            uint64_t ix2 = ix_from_pos(pos, egtb.num_nonep_pos, egtb.num_ep_pos);
+            if (pos.stm_in_check()) {
+                continue;
+            }
+            if (ix != ix2) {
+                // this should be only positions where pawns are horizontally symmetric
+                // std::cout << ix << " vs " << ix2 << std::endl;
+                if (unused % 1000 == 0) std::cout << pos;
+                // std::cout << pos;
+                // if (unused == 10) return;
+                unused++;
+            }
+            count++;
+            // std::cout << std::endl;
+        }
+    }    
+    std::cout << "Unused " << unused << " " << ((double) unused / count) << std::endl;
+}
+
 void place_piece(Piece p, int* pieces1, int* pieces2) {
     int* pieces = color_of(p) == WHITE ? pieces1 : pieces2;
     pieces[type_of(p)]++;
@@ -221,8 +258,16 @@ int main(int argc, char *argv[]) {
     Bitboards::init();
     init_kkx_table();
     init_tril();
+
+    // test_pawn_tril_1();
+    // test_pawn_tril_2();
+    // test_pawn_tril_3();
+    // test_pawn_tril_4();
+
     // test_index();
     // test_ep_index();
+    // test_pawn_index();
+
     // exit(0);
 
 
@@ -275,11 +320,11 @@ int main(int argc, char *argv[]) {
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
 
-    // pieces1 = {0, 1, 1, 0, 0, 0};
-    // pieces2 = {0, 1, 0, 0, 0, 0};
+    // pieces1 = {0, 2, 0, 0, 0, 0};
+    // pieces2 = {0, 0, 0, 0, 0, 0};
     // EGTB _egtb = EGTB(&pieces1[0], &pieces2[0]);
     // pos.reset();
-    // pos_at_ix(pos, 257392654, BLACK, &pieces1[0], &pieces2[0], _egtb.num_nonep_pos, _egtb.num_ep_pos);
+    // pos_at_ix(pos, 2313337, BLACK, &pieces1[0], &pieces2[0], _egtb.num_nonep_pos, _egtb.num_ep_pos);
     // std::cout << pos << std::endl;
     // uint64_t ix = ix_from_pos(pos, _egtb.num_nonep_pos, _egtb.num_ep_pos);
     // std::cout << ix << std::endl;

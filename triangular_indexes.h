@@ -20,6 +20,15 @@ uint64_t _number_of_ordered_tuples(uint64_t n_domain, uint64_t n_tuple) {
 uint64_t NUMBER_OF_ORDER_TUPLES[65][8];
 uint64_t NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[25][8];
 
+inline int pawnix24_to_sqix48(int ix) {
+    return ix + (ix >> 2) * 4; // put pawn on left side of board, map tp 0,1,2,3,4,8,9,10,11,16,17,...
+}
+
+// sq_ix in 0,1,...,48
+inline int sqix48_to_pawnix24(int sq_ix) {
+    return sq_ix - (sq_ix >> 3) * 4; // map to 0,1,...,23
+}
+
 void init_tril() {
     for (uint64_t i = 0; i <= 64; i++) {
         for (uint64_t n = 0; n < 8; n++) {
@@ -28,9 +37,10 @@ void init_tril() {
     }
     for (uint64_t n = 0; n < 8; n++) {
         uint64_t p = 0;
-        for (uint64_t i = 0; i <= 24; i++) {
+        for (int i = 0; i <= 24; i++) {
             NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[i][n] = p;
-            p += NUMBER_OF_ORDER_TUPLES[48-i-1][n];
+            int sq_ix = pawnix24_to_sqix48(i);
+            p += NUMBER_OF_ORDER_TUPLES[48-sq_ix-1][n];
         }
     }
 }
@@ -75,8 +85,12 @@ void tril_from_linear(uint64_t n_tuple, uint64_t tril_ix, int* ixs) {
     ixs[0] = tril_ix;
 }
 
+// pawn_ix in 0,1,2,3,4,8,9,10,11,16,17,...
+// ixs[0] in pawn_ix+1,...,48
+// ixs[i+1] in ixs[i]+1,...,48
 uint64_t pawn_tril_to_linear(uint64_t n_tuple, int pawn_ix, int* ixs) {
-    uint64_t tril_ix = NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[pawn_ix][n_tuple-1];
+    uint64_t i = sqix48_to_pawnix24(pawn_ix);
+    uint64_t tril_ix = NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[i][n_tuple-1];
     if (n_tuple > 1) {
         for (uint64_t j = 0; j < n_tuple - 1; j++) {
             ixs[j] -= (pawn_ix + 1);
@@ -94,9 +108,8 @@ void pawn_tril_from_linear(uint64_t n_tuple, uint64_t tril_ix, int& pawn_ix, int
     while (NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[i][n_tuple-1] <= tril_ix) {
         i++;
     }
-    pawn_ix = i - 1;
-    // std::cout << "  " << NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[i-1][n_tuple-1] << " .. " << NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[i][n_tuple-1] << " " << tril_ix << " -> " << tril_ix - NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[pawn_ix][n_tuple-1] << std::endl;
-    tril_ix -= NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[pawn_ix][n_tuple-1];
+    tril_ix -= NUMBER_OF_ORDER_TUPLES_WITH_FIRST_PAWN[i-1][n_tuple-1];
+    pawn_ix = pawnix24_to_sqix48(i - 1);
     if (n_tuple > 1) {
         tril_from_linear(n_tuple - 1, tril_ix, ixs);
         for (uint64_t j = 0; j < n_tuple - 1; j++) {
@@ -233,7 +246,7 @@ void test_pawn_tril_1() {
     int pawn_ix_2 = 0;
     int* ixs_2 = (int*) calloc(sizeof(uint64_t), n_tuple-1);
     for (uint64_t i = 0; i < 24; i++) {
-        pawn_ix = i;
+        pawn_ix = pawnix24_to_sqix48(i);
 
         uint64_t tril_ix = pawn_tril_to_linear(n_tuple, pawn_ix, ixs);
         assert(0 <= tril_ix && tril_ix < gt_count);
@@ -256,8 +269,8 @@ void test_pawn_tril_2() {
     int pawn_ix_2 = 0;
     int* ixs_2 = (int*) calloc(sizeof(uint64_t), n_tuple-1);
     for (uint64_t i = 0; i < 24; i++) {
-        for (uint64_t j = i+1; j < 48; j++) {
-            pawn_ix = i;
+        pawn_ix = pawnix24_to_sqix48(i);
+        for (uint64_t j = pawn_ix+1; j < 48; j++) {
             ixs[0] = j;
 
             uint64_t tril_ix = pawn_tril_to_linear(n_tuple, pawn_ix, ixs);
@@ -282,9 +295,9 @@ void test_pawn_tril_3() {
     int pawn_ix_2 = 0;
     int* ixs_2 = (int*) calloc(sizeof(uint64_t), n_tuple-1);
     for (uint64_t i = 0; i < 24; i++) {
-        for (uint64_t j = i+1; j < 48; j++) {
+        pawn_ix = pawnix24_to_sqix48(i);
+        for (uint64_t j = pawn_ix+1; j < 48; j++) {
             for (uint64_t k = j+1; k < 48; k++) {
-                pawn_ix = i;
                 ixs[0] = j;
                 ixs[1] = k;
 
@@ -310,10 +323,10 @@ void test_pawn_tril_4() {
     int pawn_ix_2 = 0;
     int* ixs_2 = (int*) calloc(sizeof(uint64_t), n_tuple-1);
     for (uint64_t i = 0; i < 24; i++) {
-        for (uint64_t j = i+1; j < 48; j++) {
+        pawn_ix = pawnix24_to_sqix48(i);
+        for (uint64_t j = pawn_ix+1; j < 48; j++) {
             for (uint64_t k = j+1; k < 48; k++) {
                 for (uint64_t l = k+1; l < 48; l++) {
-                    pawn_ix = i;
                     ixs[0] = j;
                     ixs[1] = k;
                     ixs[2] = l;

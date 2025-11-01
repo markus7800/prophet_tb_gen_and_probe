@@ -283,13 +283,16 @@ void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
 
             int first_pawn_ix;
             pawn_tril_from_linear(piece_count, tril_ix, first_pawn_ix, sqs_ixs);
-            // std::cout << "pos_at_ix first_pawn_ix: " << first_pawn_ix << std::endl;
 
-            Square sq = Square(first_pawn_ix + (first_pawn_ix >> 2) * 4 + 8); // put on left side of board
+            Square sq = Square(first_pawn_ix + 8);
             insert_increment_sq(occupied_sqs, n_occupied_sqs, sq);
             pos.put_piece(p, sq ^ flip);
             piece_count--;
             offset = 8 - 1;
+
+            // std::cout << "pos_at_ix tril_ix: " << tril_ix << std::endl;
+            // std::cout << "pos_at_ix first_pawn_ix: " << first_pawn_ix << std::endl;
+            // std::cout << "pos_at_ix sqs_ixs: "; for (int j = 0; j < piece_count; j++) { std::cout << sqs_ixs[j] << " "; }; std::cout << std::endl;
 
         } else if (type_of(p) == PAWN) {
             uint64_t s = number_of_ordered_tuples(48 - n_occupied_sqs, piece_count);
@@ -505,6 +508,7 @@ uint64_t ix_from_pos_kkp(EGPosition const &pos, uint64_t num_nonep_pos) {
 
         Bitboard pieceBB = pos.pieces(stm, PAWN);
         assert (pieceBB);
+        // TODO: check maybe_update_flip_and_transform_bb always returns pieceBB?
         Bitboard transformed_bb = maybe_update_flip_and_transform_bb(pieceBB, is_horizontal_symmetric, flip) & attacks_bb<PAWN>(ep_sq, BLACK);
         ep_cap_pawn_sq = pop_lsb(transformed_bb);
 
@@ -538,9 +542,7 @@ uint64_t ix_from_pos_kkp(EGPosition const &pos, uint64_t num_nonep_pos) {
 
                 if (first_pawn) {
                     first_pawn = false;
-                    int sq_ix = (int) sq - k - 8;
-                    sq_ix = sq_ix - (sq_ix >> 3) * 4; // map to 0,1,...,23
-                    first_pawn_ix = sq_ix;
+                    first_pawn_ix = (int) sq - k - 8;
                     // std::cout << "ix_from_pos first_pawn_ix: " << first_pawn_ix << " " << square_to_uci(sq) << std::endl;
                 } else {
                     sqs_ixs[n_sq_ixs] = (int) sq - k - 8 + piece_count;
@@ -612,6 +614,7 @@ void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2) {
     bool is_horizontal_symmetric = true;
     int8_t flip = 0;
     int8_t swap = 0;
+    int8_t stm_flip = stm == BLACK ? 56 : 0;
 
     Square orig_ktm_sq = pos.square<KING>(stm);
 
@@ -619,7 +622,7 @@ void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2) {
     if (!has_pawns) {
         flip = ((orig_ktm_sq & RightHalfBB) ? 7 : 0) ^ ((orig_ktm_sq & TopHalfBB) ? 56 : 0);
     } else {
-        flip = 0; 
+        flip = stm_flip; 
         // do not use stm == BLACK ? 56 : 0;
         // pos_at_ix flips back such that black pawns move south, internally a black pawn moving south is equivalent to a white pawn moving up
         if (pos.ep_square() != SQ_NONE) {
@@ -629,23 +632,23 @@ void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2) {
                 ep_sq = ep_sq ^ 7;
                 is_horizontal_symmetric = false;
             }
-            pos2.set_ep_square(ep_sq);
+            pos2.set_ep_square(ep_sq ^ stm_flip);
         }
         for (Color c: {~stm, stm}) {
             Bitboard transformedBB = maybe_update_flip_and_transform_bb(pos.pieces(c, PAWN), is_horizontal_symmetric, flip);
             while (transformedBB) {
-                pos2.put_piece(make_piece(c,PAWN), pop_lsb(transformedBB));
+                pos2.put_piece(make_piece(c,PAWN), pop_lsb(transformedBB) ^ stm_flip);
             }
         }
     }
 
     if (!has_pawns) {
         Square ktm_sq = maybe_update_swap_and_transform(orig_ktm_sq, flip, is_diag_symmetric, swap);
-        pos2.put_piece(make_piece(stm, KING), ktm_sq);
+        pos2.put_piece(make_piece(stm, KING), ktm_sq ^ stm_flip);
 
         Square orig_kntm_sq = pos.square<KING>(~stm);
         Square ktnm_sq = maybe_update_swap_and_transform(orig_kntm_sq, flip, is_diag_symmetric, swap);
-        pos2.put_piece(make_piece(~stm, KING), ktnm_sq);
+        pos2.put_piece(make_piece(~stm, KING), ktnm_sq ^ stm_flip);
     }
 
     for (Color c: {~stm, stm}) {
@@ -660,7 +663,7 @@ void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2) {
                 else
                     transformedBB = maybe_update_flip_and_transform_bb(bb, is_horizontal_symmetric, flip);
                 while (transformedBB) {
-                    pos2.put_piece(make_piece(c,pt), pop_lsb(transformedBB));
+                    pos2.put_piece(make_piece(c,pt), pop_lsb(transformedBB) ^ stm_flip);
                 }
             }
         }
