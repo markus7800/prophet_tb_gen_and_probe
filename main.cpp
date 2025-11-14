@@ -375,7 +375,9 @@ int main(int argc, char *argv[]) {
     // pieces1 = {0, 1, 1, 0, 0, 0};
     // pieces2 = {0, 0, 0, 1, 1, 0};
 
-    // g = new GenEGTB(&pieces1[0], &pieces2[0], "egtbs/", true);
+    std::string folder = "egtbs/";
+
+    // g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
     // g->gen(nthreads);
     // g->~GenEGTB();
     // return 0;
@@ -385,7 +387,7 @@ int main(int argc, char *argv[]) {
     // EGPosition pos;
     int16_t longest_overall_mate = WIN_IN(0) + 1;
     std::string longest_overall_mate_str;
-    bool check_longest_mate = true;
+    bool check_longest_mate = false;
     bool generate_missing = true;
 
     std::unordered_set<std::string> egtbs = {};
@@ -396,8 +398,9 @@ int main(int argc, char *argv[]) {
     int MIN_PIECE_COUNT = 4;
     int MAX_PIECE_COUNT = 4;
 
-    int MIN_PAWN_COUNT = 0;
-    int MAX_PAWN_COUNT = 0;
+    int MIN_PAWN_COUNT = 1;
+    int MAX_PAWN_COUNT = 1;
+
 
     for (int piece_count = MIN_PIECE_COUNT; piece_count <= MAX_PIECE_COUNT; piece_count++) {
         for (int pawn_count = MIN_PAWN_COUNT; pawn_count <= std::min(piece_count,MAX_PAWN_COUNT); pawn_count++ ) {
@@ -427,7 +430,7 @@ int main(int argc, char *argv[]) {
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
                                 if (generate_missing) {
-                                    g = new GenEGTB(&pieces1[0], &pieces2[0], "egtbs/", true);
+                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
                                     g->gen(nthreads);
                                     g->~GenEGTB();
                                 }
@@ -442,10 +445,10 @@ int main(int argc, char *argv[]) {
                                     (id == "KKQRRR")
                                 );*/
 
-                                if (egtb_exists(&egtb, "egtbs/") && check_longest_mate) {
+                                if (egtb_exists(&egtb, folder) && check_longest_mate) {
                                     std::cout << id << ": ";
                                     
-                                    unzip_and_load_egtb(&egtb, "egtbs/", true);
+                                    unzip_and_load_egtb(&egtb, folder, true);
 
                                     int16_t longest_mate = WIN_IN(0) + 1;
                                     uint64_t longest_mate_ix = 0;
@@ -455,13 +458,7 @@ int main(int argc, char *argv[]) {
                                         int16_t val = egtb.TB[win_ix];
                                         if (!(IS_SET(val))) { std::cout << "CORRUPT: " << win_ix << ": " << val << std::endl; corrupt = true; };
                                         if (
-                                            (id == "KNKRBN" && win_ix == 3834976428) ||
-                                            (id == "KBKQRB" && win_ix == 787988652) ||
-                                            (id == "KBKQQB" && win_ix == 1167485100) ||
-                                            (id == "KBKQQQ" && win_ix == 120180908) ||
-                                            (id == "KRKRBN" && win_ix == 2460803244) ||
-                                            (id == "KRKQQB" && win_ix == 2381426860) ||
-                                            (id == "KKQRRR" && win_ix == 72179884)
+                                            false
                                         ) {
                                             std::cout << "PREV CORRUPT: " << win_ix << ": " << val << std::endl; corrupt = true;
                                         };
@@ -501,8 +498,8 @@ int main(int argc, char *argv[]) {
 
                                     free_egtb(&egtb);
 
-                                    if (egtb_exists_zipped(&egtb, "egtbs/"))
-                                        rm_unzipped_egtb(&egtb, "egtbs/"); // TODO: add full path to egtb
+                                    if (egtb_exists_zipped(&egtb, folder))
+                                        rm_unzipped_egtb(&egtb, folder); // TODO: add full path to egtb
                                 }
                             }
 

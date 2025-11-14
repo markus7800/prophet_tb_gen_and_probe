@@ -1174,7 +1174,7 @@ Archive:  egtbs/KNKBBN.egtb.zip
 KNKBBN: 8/8/8/8/8/8/4bb2/N1K1kn2 w - -  1
 Archive:  egtbs/KNKRBN.egtb.zip
   inflating: egtbs/KNKRBN.egtb       
-KNKRBN: CORRUPT: 3834976428: -5076
+KNKRBN: 8/8/8/8/8/2K5/8/nrkbN3 w - -  1
 Archive:  egtbs/KNKQBN.egtb.zip
   inflating: egtbs/KNKQBN.egtb       
 KNKQBN: 8/8/8/8/8/8/4bq2/N1K1kn2 w - -  1
@@ -1453,10 +1453,10 @@ Archive:  egtbs/KBKRRB.egtb.zip
 KBKRRB: 8/8/8/8/8/r7/b1K5/kr4B1 w - -  5
 Archive:  egtbs/KBKQRB.egtb.zip
   inflating: egtbs/KBKQRB.egtb       
-KBKQRB: CORRUPT: 787988652: -5082
+KBKQRB: 8/8/8/8/8/8/b1K5/kr2q1B1 w - -  5
 Archive:  egtbs/KBKQQB.egtb.zip
   inflating: egtbs/KBKQQB.egtb       
-KBKQQB: CORRUPT: 1167485100: -5092
+KBKQQB: 8/8/8/8/8/5q2/b3q3/k1K3B1 w - -  5
 Archive:  egtbs/KBKRRR.egtb.zip
   inflating: egtbs/KBKRRR.egtb       
 KBKRRR: no win.
@@ -1468,7 +1468,7 @@ Archive:  egtbs/KBKQQR.egtb.zip
 KBKQQR: no win.
 Archive:  egtbs/KBKQQQ.egtb.zip
   inflating: egtbs/KBKQQQ.egtb       
-KBKQQQ: CORRUPT: 120180908: -5090
+KBKQQQ: no win.
 Archive:  egtbs/KRRRRK.egtb.zip
   inflating: egtbs/KRRRRK.egtb       
 KRRRRK: 8/8/8/8/4k3/8/1K6/RRRR4 w - -  7
@@ -1594,7 +1594,7 @@ Archive:  egtbs/KRKBBN.egtb.zip
 KRKBBN: 8/1b6/8/8/8/8/kbK5/1R3n2 w - -  79
 Archive:  egtbs/KRKRBN.egtb.zip
   inflating: egtbs/KRKRBN.egtb       
-KRKRBN: CORRUPT: 2460803244: -5034
+KRKRBN: 8/1b6/8/8/8/8/krK5/1R3n2 w - -  79
 Archive:  egtbs/KRKQBN.egtb.zip
   inflating: egtbs/KRKQBN.egtb       
 KRKQBN: 8/1b6/8/8/8/8/kqK5/1R3n2 w - -  79
@@ -1624,7 +1624,7 @@ Archive:  egtbs/KRKQRB.egtb.zip
 KRKQRB: 8/8/8/1q6/8/8/1RK5/k2r2b1 w - -  53
 Archive:  egtbs/KRKQQB.egtb.zip
   inflating: egtbs/KRKQQB.egtb       
-KRKQQB: CORRUPT: 2381426860: -5084
+KRKQQB: 8/8/8/8/6q1/3K2b1/8/3k2qR w - -  51
 Archive:  egtbs/KRKRRR.egtb.zip
   inflating: egtbs/KRKRRR.egtb       
 KRKRRR: 8/8/8/8/8/2K5/4rrrR/2k5 w - -  7
@@ -1731,8 +1731,7 @@ Archive:  egtbs/KQKQQB.egtb.zip
   inflating: egtbs/KQKQQB.egtb       
 KQKQQB: 8/q1b5/8/8/8/8/k2K4/q5Q1 w - -  47
 Archive:  egtbs/KQKRRR.egtb.zip
-  inflating: egtbs/KQKRRR.egtb       
-KQKRRR: 7r/8/8/7k/8/1r6/6r1/3KQ3 w - -  101
+  inflating: egtbs/KQKRRR.egtb       KQKRRR: 7r/8/8/7k/8/1r6/6r1/3KQ3 w - -  101
 Archive:  egtbs/KQKQRR.egtb.zip
   inflating: egtbs/KQKQRR.egtb       
 KQKQRR: 7r/8/8/8/8/1r2k3/8/3KqQ2 w - -  99
@@ -1837,7 +1836,7 @@ Archive:  egtbs/KKRRRR.egtb.zip
 KKRRRR: no win.
 Archive:  egtbs/KKQRRR.egtb.zip
   inflating: egtbs/KKQRRR.egtb       
-KKQRRR: CORRUPT: 72179884: -5094
+KKQRRR: no win.
 Archive:  egtbs/KKQQRR.egtb.zip
   inflating: egtbs/KKQQRR.egtb       
 KKQQRR: no win.

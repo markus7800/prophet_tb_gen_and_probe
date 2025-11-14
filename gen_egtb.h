@@ -558,6 +558,10 @@ void GenEGTB::gen(int nthreads) {
         std::cout << "    " << N_SNTM_IN_CHECK << " of which sntm in check (" << (double) N_SNTM_IN_CHECK / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         if (LOSS_EGTB->num_ep_pos > 0) std::cout << "    " << N_ILLEGAL_EP << " EP positions illegal (" << (double) N_ILLEGAL_EP / LOSS_EGTB->num_ep_pos * 100 << "%)" << std::endl;;
     }
+
+    TimePoint t1 = now();
+    std::cout << "Finished checkmate init in " << (double) (t1 - t0) / 1000.0 << "s." << std::endl;
+
  
     std::cout << "MIN_LEVEL = " << int(MIN_LEVEL) << std::endl;
 
@@ -749,14 +753,13 @@ void GenEGTB::gen(int nthreads) {
         if (ix < BTM_EGTB->num_pos) assert (IS_SET(BTM_EGTB->TB[ix] || BTM_EGTB->TB[ix] == UNUSED));
     }
 
-    TimePoint t1 = now();
-    std::cout << "Finished in " << (double) (t1 - t0) / 1000.0 << "s." << std::endl;
+    TimePoint t2 = now();
+    std::cout << "Finished retrograde in " << (double) (t2 - t1) / 1000.0 << "s." << std::endl;
 
     // Consistency checks:
 
-    LEVEL = 0;
-    N_LEVEL_POS = 0;
-    while (true) {
+    int16_t MAX_LEVEL = LEVEL;
+    for (LEVEL = 0; LEVEL <= MAX_LEVEL; LEVEL++) {
         #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS)
         for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
             EGPosition pos;
@@ -766,24 +769,10 @@ void GenEGTB::gen(int nthreads) {
                 assert (!pos.sntm_in_check());
                 if (ix > WTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
                 check_consistency(pos, false);
-                N_LEVEL_POS++;
-            }
-            if ((ix < BTM_EGTB->num_pos) && (BTM_EGTB->TB[ix] == LOSS_IN(LEVEL) || BTM_EGTB->TB[ix] == WIN_IN(LEVEL))) {
-                pos.reset();
-                pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
-                assert (!pos.sntm_in_check());
-                if (ix > BTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
-                check_consistency(pos, false);
-                N_LEVEL_POS++;
             }
         }
-        std::cout << "Consistency check passed for level " << LEVEL << std::endl;
-        if (LEVEL > MIN_LEVEL && N_LEVEL_POS == 0) { break; }
-        
-        LEVEL++;
-        N_LEVEL_POS = 0;
+        std::cout << "WTM Consistency check passed for level " << LEVEL << std::endl;
     }
-
     #pragma omp parallel for num_threads(nthreads) schedule(static,64)
     for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
         EGPosition pos;
@@ -794,6 +783,28 @@ void GenEGTB::gen(int nthreads) {
             if (ix > WTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
             check_consistency(pos, false);
         }
+    }
+    std::cout << "WTM Consistency check passed for draws" << std::endl;
+
+
+    for (LEVEL = 0; LEVEL <= MAX_LEVEL; LEVEL++) {
+        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS)
+        for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
+            EGPosition pos;
+            if ((ix < BTM_EGTB->num_pos) && (BTM_EGTB->TB[ix] == LOSS_IN(LEVEL) || BTM_EGTB->TB[ix] == WIN_IN(LEVEL))) {
+                pos.reset();
+                pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
+                assert (!pos.sntm_in_check());
+                if (ix > BTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
+                check_consistency(pos, false);
+            }
+        }
+        std::cout << "BTM Consistency check passed for level " << LEVEL << std::endl;
+    }
+
+    #pragma omp parallel for num_threads(nthreads) schedule(static,64)
+    for (uint64_t ix = 0; ix < MAX_NPOS; ix++) {
+        EGPosition pos;
         if (ix < BTM_EGTB->num_pos && BTM_EGTB->TB[ix] == 0) {
             pos.reset();
             pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
@@ -802,33 +813,37 @@ void GenEGTB::gen(int nthreads) {
             check_consistency(pos, false);
         }
     }
-    std::cout << "Consistency check passed for draws" << std::endl;
+    std::cout << "BTM Consistency check passed for draws" << std::endl;
 
-
-    for (int wtm = 0; wtm <= 1; ++wtm) {
-        EGTB* egtb = wtm ? WTM_EGTB : BTM_EGTB;
-
-        uint64_t wins = 0;
-        uint64_t draws = 0;
-        uint64_t losses = 0;
-        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:wins) reduction(+:draws) reduction(+:losses)
-        for (uint64_t ix = 0; ix < egtb->num_pos; ix++) {
-            if (egtb->TB[ix] == UNUSED) {
-                egtb->TB[ix] = 0; // can store 0 for unused for more efficient compression
-                continue; 
-            }
-            wins += (egtb->TB[ix] > 0);
-            draws += (egtb->TB[ix] == 0);
-            losses += (egtb->TB[ix] < 0);
-        }
-        std::cout << wins << " wins in " << egtb->id << std::endl;
-        std::cout << draws << " draws in " << egtb->id << std::endl;
-        std::cout << losses << " losses in " << egtb->id << std::endl;
-    }
+    TimePoint t3 = now();
+    std::cout << "Finished consistency checks in " << (double) (t3 - t2)/ 1000.0 << "s." << std::endl;
 
     store_egtb(WTM_EGTB, folder);
     store_egtb(BTM_EGTB, folder);
     std::cout << "Stored " << WTM_EGTB->id << " and " << BTM_EGTB->id << std::endl;
+
+    // check file integrity
+    EGTB WTM_EGTB_MMAP = EGTB(this->wpieces, this->bpieces);
+    load_egtb(&WTM_EGTB_MMAP, folder, true);
+    for (uint64_t ix = 0; ix < WTM_EGTB_MMAP.num_pos; ix++) {
+        if (!IS_SET(WTM_EGTB_MMAP.TB[ix]))  {
+            std::cout << "WTM corrupted entry at " << ix << WTM_EGTB_MMAP.TB[ix] << std::endl;
+            exit(1);
+        }
+    }
+    free_egtb(&WTM_EGTB_MMAP);
+    std::cout << "Checked WTM integrity" << std::endl;
+
+    EGTB BTM_EGTB_MMAP = EGTB(this->bpieces, this->wpieces);
+    load_egtb(&BTM_EGTB_MMAP, folder, true);
+    for (uint64_t ix = 0; ix < BTM_EGTB_MMAP.num_pos; ix++) {
+        if (!IS_SET(BTM_EGTB_MMAP.TB[ix])) {
+            std::cout << "BTM corrupted entry at " << ix << BTM_EGTB_MMAP.TB[ix] << std::endl;
+            exit(1);
+        }
+    }
+    free_egtb(&BTM_EGTB_MMAP);
+    std::cout << "Checked BTM integrity" << std::endl;
 
     if (zip) {
         zip_egtb(WTM_EGTB, folder);
@@ -838,6 +853,9 @@ void GenEGTB::gen(int nthreads) {
 
         rm_all_unzipped_egtbs(folder);
     }
+
+    TimePoint t4 = now();
+    std::cout << "Finished TB in " << (double) (t4 - t0)/ 1000.0 << "s." << std::endl;
 }
 
 #endif
