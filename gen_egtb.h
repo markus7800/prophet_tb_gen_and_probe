@@ -82,7 +82,10 @@ void store_egtb(EGTB* egtb, std::string folder) {
     outputFileStream.open(filename, std::ios::out|std::ios::binary);
     for(uint64_t i=0; i<egtb->num_pos; i++) {
         int16_t val = egtb->TB[i];
-        assert (IS_SET(val));
+        if (!IS_SET(val)) {
+            std::cout << "store_egtb: corrupt value " << int(val) << " at " << i << std::endl;
+            exit(1);
+        }
         outputFileStream.write((char*) &val, sizeof(int16_t));
     }
 }
