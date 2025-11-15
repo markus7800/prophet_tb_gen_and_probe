@@ -7,11 +7,46 @@
 #include "uci.h"
 #include "triangular_indexes.h"
 
+void compute_kntm_poscounts(const int stm_pieces[6], const int sntm_pieces[6], uint64_t kntm_poscounts[11]) {
+    kntm_poscounts[0] = 0;
+    for (int ix = 0; ix < 10; ix++) {
+        Square kntm_sq = Square(IX_TO_KNTM_SQ[ix]);
+
+        uint64_t n = 0;
+
+        // ktm
+        if (square_bb(kntm_sq) & DiagBB) {
+            int val1 =  36 - 6 + 3 * (kntm_sq == SQ_A1);
+            int val2 = popcount((DiagBB | BelowDiagBB) & (~unblockablechecks_bb(kntm_sq, KING)) & ~square_bb(kntm_sq));
+            assert (val1 == val2);
+            n = val1;
+        } else {
+            n = 64 - num_unblockablechecks(kntm_sq, KING) - 1;
+        }
+
+        uint64_t n_squares_available_to_sntm = 62;
+
+        // stm_pieces
+        for (PieceType pt = KNIGHT; pt < KING; ++pt) {
+            n *= number_of_ordered_tuples(64 - num_unblockablechecks(kntm_sq, pt) - 2, stm_pieces[pt]);
+            n_squares_available_to_sntm -= stm_pieces[pt];
+        }
+
+        // sntm pieces
+        for (PieceType pt = KNIGHT; pt < KING; ++pt) {
+            n *= number_of_ordered_tuples(n_squares_available_to_sntm, sntm_pieces[pt]);
+            n_squares_available_to_sntm -= sntm_pieces[pt];
+        }
+        std::cout << ix << ": " << square_to_uci(kntm_sq) << " " << n << " " <<  kntm_poscounts[ix] + n << std::endl;
+
+        kntm_poscounts[ix+1] = kntm_poscounts[ix] + n;
+    }
+}
 
 uint64_t compute_num_nonep_positions(const int stm_pieces[6], const int sntm_pieces[6]) {
     int n_pawns = stm_pieces[PAWN] + sntm_pieces[PAWN];
     if (n_pawns == 0) {
-        uint64_t n = N_KKX;
+        uint64_t n = 462;
         uint64_t s = 62;
         
         for (int stm = 0; stm <= 1; ++stm) {
@@ -140,75 +175,71 @@ int insert_count_lt_squares(Square occupied_sqs[6], int& n_occupied_sqs, Square 
     return k;
 }
 
-void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6]) {
+void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6], const int bpieces[6], const uint64_t kntm_poscounts[11]) {
     assert (wpieces[PAWN] + bpieces[PAWN] == 0);
     pos.set_side_to_move(stm);
 
-    bool is_diag_symmetric = true;
-    Square occupied_sqs[6];
+    uint64_t s = 0;
+    Bitboard allowed_squares = 0;
 
-    uint64_t kkx = ix % N_KKX;
-    ix = ix / N_KKX;
+    uint64_t kntm_ix = 0;
+    while (kntm_poscounts[kntm_ix+1] <= ix) kntm_ix++;
+    ix -= kntm_poscounts[kntm_ix];
+    Square kntm_sq = Square(IX_TO_KNTM_SQ[kntm_ix]);
 
-    Square kntm_sq = Square(KKX_KNTM_SQ[kkx]);
-    is_diag_symmetric = is_diag_symmetric && (kntm_sq & DiagBB);
-
-    Square ktm_sq = Square(KKX_KTM_SQ[kkx]);
-    is_diag_symmetric = is_diag_symmetric && (ktm_sq & DiagBB);
-
-    if (ktm_sq < kntm_sq) {
-        occupied_sqs[0] = ktm_sq;
-        occupied_sqs[1] = kntm_sq;
+    if (square_bb(kntm_sq) & DiagBB) {
+        // constrained to lower diagonal
+        allowed_squares = ~(unblockablechecks_bb(kntm_sq,KING) | square_bb(kntm_sq)) & (DiagBB | BelowDiagBB);
+        s = 36 - 6 + 3 * (kntm_sq == SQ_A1);
     } else {
-        occupied_sqs[0] = kntm_sq;
-        occupied_sqs[1] = ktm_sq;
+        allowed_squares = ~(unblockablechecks_bb(kntm_sq,KING) | square_bb(kntm_sq));
+        s = (64 - num_unblockablechecks(kntm_sq,KING) - 1);
     }
+
+    uint64_t ktm_ix = ix % s;
+    ix = ix / s;
+
+    Square ktm_sq = nth_set_sq(allowed_squares, ktm_ix);
+
     pos.put_piece(make_piece(stm, KING), ktm_sq);
     pos.put_piece(make_piece(~stm, KING), kntm_sq);
-
-    Piece pieces[4] = {NO_PIECE,NO_PIECE,NO_PIECE,NO_PIECE};
-    int piece_counts[4] = {0,0,0,0};
-    int total_piece_count = 2;
-    int i = 0;
-    // std::cout << std::endl;
-    for (Color c: {~stm, stm}) {
-        int* c_pieces = (c == WHITE) ? wpieces : bpieces;
-        for (PieceType p : {QUEEN, ROOK, BISHOP, KNIGHT}) {
-            if (c_pieces[p] == 0) { continue; }
-            pieces[i] = make_piece(c, p);
-            piece_counts[i] = c_pieces[p];
-            total_piece_count += piece_counts[i];
-            i++;
-            // std::cout << PieceToChar[p] << ": " << piece_counts[i] << std::endl;
-            if (total_piece_count > 6) { std::cout << "More than 6 pieces not supported! (have " << total_piece_count << ")\n"; assert(false); }
-        }
-    }
-
 
     int n_occupied_sqs = 2;
 
     int sqs_ixs[4];
 
-    // this also generates position where first off-diagonal piece is not on bottom half
-    // but these indexes are unused anyways
-    for (int l = 0; l < 4; l++) {
-        Piece p = pieces[l];
-        int piece_count = piece_counts[l];
-        if (p == NO_PIECE) { break; }
-        uint64_t s = number_of_ordered_tuples(64 - n_occupied_sqs, piece_count);
+    for (Color c: {stm, ~stm}) {
+        const int* c_pieces = (c == WHITE) ? wpieces : bpieces;
+        for (PieceType pt : {QUEEN, ROOK, BISHOP, KNIGHT}) {
+            if (c_pieces[pt] == 0) { continue; }
+            int piece_count = c_pieces[pt];
+            Piece pc = make_piece(c, pt);
 
-        uint64_t tril_ix = ix % s;
-        ix = ix / s;
+            if (c == stm) {
+                allowed_squares = ~(unblockablechecks_bb(kntm_sq,pt) | square_bb(kntm_sq) | square_bb(ktm_sq));
+                s = number_of_ordered_tuples(64 - num_unblockablechecks(kntm_sq,pt) - 2, piece_count);
+            } else {
+                allowed_squares = ~pos.pieces();
+                s = number_of_ordered_tuples(64 - n_occupied_sqs, piece_count);
+            }
 
-        tril_from_linear(piece_count, tril_ix, sqs_ixs);
-        for (int j = 0; j < piece_count; j++) {
-            Square sq = Square(sqs_ixs[j]-j);
+            uint64_t tril_ix = ix % s;
+            ix = ix / s;
 
-            insert_increment_sq(occupied_sqs, n_occupied_sqs, sq);
+            // std::cout << Bitboards::pretty(allowed_squares) << std::endl;
 
-            pos.put_piece(p, sq);
+            tril_from_linear(piece_count, tril_ix, sqs_ixs);
+            for (int j = 0; j < piece_count; j++) {
+                Square sq = nth_set_sq(allowed_squares, sqs_ixs[j]);
+                pos.put_piece(pc, sq);
+                n_occupied_sqs++;
+            }
         }
     }
+    
+    if (n_occupied_sqs > 6) { std::cout << "More than 6 pieces not supported! (have " << n_occupied_sqs << ")\n"; assert(false); }
+
+    // can be broken such that popcount(pos.pieces()) != n_occupied_sqs
 }
 
 void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6], uint64_t num_nonep_pos) {
@@ -323,12 +354,12 @@ void pos_at_ix_kkp(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int 
     }
 }
 
-void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6], uint64_t num_nonep_pos, uint64_t num_ep_pos) {
+void pos_at_ix_(EGPosition &pos, uint64_t ix, Color stm, int wpieces[6], int bpieces[6], uint64_t num_nonep_pos, uint64_t num_ep_pos, uint64_t kntm_poscounts[11]) {
     assert (ix < num_nonep_pos + num_ep_pos);
     if (wpieces[PAWN] + bpieces[PAWN] > 0) {
         pos_at_ix_kkp(pos, ix, stm, wpieces, bpieces, num_nonep_pos);
     } else {
-        pos_at_ix_kkx(pos, ix, stm, wpieces, bpieces);
+        pos_at_ix_kkx(pos, ix, stm, wpieces, bpieces, kntm_poscounts);
     }
 }
 
@@ -381,13 +412,13 @@ inline Bitboard maybe_update_swap_and_transform_bb(Bitboard piecesBB, int8_t fli
 }
 
 
-uint64_t ix_from_pos_kkx(EGPosition const &pos) {
+uint64_t ix_from_pos_kkx(EGPosition const &pos, const uint64_t kntm_poscounts[11]) {
     assert (pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK) == 0);
 
     Color stm = pos.side_to_move();
 
     bool is_diag_symmetric = true;
-    Square occupied_sqs[6];
+    Bitboard occupied_sqs = 0;
 
     Square orig_kntm_sq = pos.square<KING>(~stm);
 
@@ -397,48 +428,55 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos) {
     int8_t swap = 0;
 
     Square kntm_sq = maybe_update_swap_and_transform(orig_kntm_sq, flip, is_diag_symmetric, swap);
+    occupied_sqs |= square_bb(kntm_sq);
 
     Square orig_ktm_sq = pos.square<KING>(stm);
     Square ktm_sq = maybe_update_swap_and_transform(orig_ktm_sq, flip, is_diag_symmetric, swap);
-    
-    int16_t kkx_ix = get_kkx_ix(orig_ktm_sq, orig_kntm_sq);
+    occupied_sqs |= square_bb(ktm_sq);
 
-    uint64_t ix = kkx_ix;
-    uint64_t multiplier = N_KKX;
-
-    if (ktm_sq < kntm_sq) {
-        occupied_sqs[0] = ktm_sq;
-        occupied_sqs[1] = kntm_sq;
-    } else {
-
-        occupied_sqs[0] = kntm_sq;
-        occupied_sqs[1] = ktm_sq;
-    }
-
-
-    int sqs_ixs[4];
-    uint64_t n_available_squares = 62;
     int n_occupied_sqs = 2;
 
-    for (Color c: {~stm, stm}) {
-        for (PieceType p: {QUEEN, ROOK, BISHOP, KNIGHT}) {
-            Bitboard pieceBB = pos.pieces(c, p);
+    uint64_t ix = kntm_poscounts[kntm_sq_to_ix(kntm_sq)];
+    int8_t ktm_ix = get_kkx_ktm_ix(orig_ktm_sq, orig_kntm_sq);
+
+    uint64_t multiplier = 1;
+    if (square_bb(kntm_sq) & DiagBB) {
+        multiplier = 36 - 6 + 3 * (kntm_sq == SQ_A1);
+    } else {
+        multiplier = (64 - num_unblockablechecks(kntm_sq,KING) - 1);
+    }
+    ix += ktm_ix;
+
+    int sqs_ixs[4];
+    uint64_t n_available_squares;
+
+    for (Color c: {stm, ~stm}) {
+        for (PieceType pt: {QUEEN, ROOK, BISHOP, KNIGHT}) {
+            Bitboard pieceBB = pos.pieces(c, pt);
             if (pieceBB) {
                 Bitboard transformedBB = maybe_update_swap_and_transform_bb(pieceBB, flip, is_diag_symmetric, swap);
+                Bitboard unavailable_squares = (c == stm) ? (unblockablechecks_bb(kntm_sq,pt) | square_bb(kntm_sq) | square_bb(ktm_sq)) : occupied_sqs;
                 int piece_count = 0;
                 while (transformedBB) {
                     Square sq = pop_lsb(transformedBB);
-                    int k = insert_count_lt_squares(occupied_sqs, n_occupied_sqs, sq);
-                    sqs_ixs[piece_count] = (int) sq - k + piece_count;
+                    int k = popcount((square_bb(sq) - 1) & unavailable_squares); // count occupied squares lower than sq
+                    occupied_sqs |= square_bb(sq);
+                    n_occupied_sqs++;
+                    sqs_ixs[piece_count] = (int) sq - k;
                     piece_count++;
                 }
                 uint64_t tril_ix = tril_to_linear(piece_count, sqs_ixs);
                 ix += tril_ix * multiplier;
+                if (c == stm) {
+                    n_available_squares = 64 - num_unblockablechecks(kntm_sq,pt) - 2;
+                } else {
+                    n_available_squares = 64 - n_occupied_sqs;
+                }
                 multiplier *= number_of_ordered_tuples(n_available_squares, piece_count);
-                n_available_squares -= piece_count;                
             }
         }
     }
+
     return ix;
 }
 
@@ -598,13 +636,13 @@ uint64_t ix_from_pos_kkp(EGPosition const &pos, uint64_t num_nonep_pos) {
     return ix;
 }
 
-uint64_t ix_from_pos(EGPosition const &pos, uint64_t num_nonep_pos, uint64_t num_ep_pos) {
+uint64_t ix_from_pos_(EGPosition const &pos, uint64_t num_nonep_pos, uint64_t num_ep_pos, const uint64_t kntm_poscounts[11]) {
     if (pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK) > 0) {
         uint64_t ix = ix_from_pos_kkp(pos, num_nonep_pos);
         assert (ix < num_nonep_pos + num_ep_pos);
         return ix;
     } else {
-        uint64_t ix = ix_from_pos_kkx(pos);
+        uint64_t ix = ix_from_pos_kkx(pos, kntm_poscounts);
         assert (ix < num_nonep_pos + num_ep_pos);
         return ix;
     }

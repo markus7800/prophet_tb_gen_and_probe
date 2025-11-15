@@ -26,6 +26,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+#include <x86intrin.h>
+
 
 #include "types.h"
 
@@ -69,6 +71,8 @@ extern uint8_t SquareDistance[SQUARE_NB][SQUARE_NB];
 extern Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
 extern Bitboard LineBB[SQUARE_NB][SQUARE_NB];
 extern Bitboard PseudoAttacks[PIECE_TYPE_NB][SQUARE_NB];
+extern Bitboard UnblockableChecks[PIECE_TYPE_NB][SQUARE_NB];
+extern int UnblockableChecksCount[PIECE_TYPE_NB][SQUARE_NB];
 
 
 // Magic holds all magic bitboards relevant data for a single square
@@ -119,12 +123,12 @@ constexpr Bitboard DiagBB =
     square_bb(SQ_A1) | square_bb(SQ_B2) | square_bb(SQ_C3) | square_bb(SQ_D4) | square_bb(SQ_E5) | square_bb(SQ_F6) | square_bb(SQ_G7) | square_bb(SQ_H8);
 
 constexpr Bitboard BelowDiagBB = 
-    square_bb(SQ_H7) |
-    square_bb(SQ_G6) | square_bb(SQ_H6) |
-    square_bb(SQ_F5) | square_bb(SQ_G5) | square_bb(SQ_H5) |
-    square_bb(SQ_E4) | square_bb(SQ_F4) | square_bb(SQ_G4) | square_bb(SQ_H4) |
-    square_bb(SQ_D3) | square_bb(SQ_E3) | square_bb(SQ_F3) | square_bb(SQ_G3) | square_bb(SQ_H3) |
-    square_bb(SQ_C2) | square_bb(SQ_D2) | square_bb(SQ_E2) | square_bb(SQ_F2) | square_bb(SQ_G2) | square_bb(SQ_H2) | 
+                                                                                                                      square_bb(SQ_H7) |
+                                                                                                   square_bb(SQ_G6) | square_bb(SQ_H6) |
+                                                                                square_bb(SQ_F5) | square_bb(SQ_G5) | square_bb(SQ_H5) |
+                                                             square_bb(SQ_E4) | square_bb(SQ_F4) | square_bb(SQ_G4) | square_bb(SQ_H4) |
+                                          square_bb(SQ_D3) | square_bb(SQ_E3) | square_bb(SQ_F3) | square_bb(SQ_G3) | square_bb(SQ_H3) |
+                       square_bb(SQ_C2) | square_bb(SQ_D2) | square_bb(SQ_E2) | square_bb(SQ_F2) | square_bb(SQ_G2) | square_bb(SQ_H2) | 
     square_bb(SQ_B1) | square_bb(SQ_C1) | square_bb(SQ_D1) | square_bb(SQ_E1) | square_bb(SQ_F1) | square_bb(SQ_G1) | square_bb(SQ_H1);
 
 // constexpr bool is_full1 = (FullBB == (TopHalfBB | BottomHalfBB));
@@ -248,6 +252,17 @@ inline Bitboard attacks_bb(Square s, Color c = COLOR_NB) {
     assert((Pt != PAWN || c < COLOR_NB) && (is_ok(s)));
     return Pt == PAWN ? PseudoAttacks[c][s] : PseudoAttacks[Pt][s];
 }
+
+inline Bitboard unblockablechecks_bb(Square s, PieceType pt) {
+    assert (pt != PAWN); // TODO: pawn always move up
+    return UnblockableChecks[pt][s];
+}
+
+inline int num_unblockablechecks(Square s, PieceType pt) {
+    assert (pt != PAWN); // TODO: pawn always move up
+    return UnblockableChecksCount[pt][s];
+}
+
 
 
 // Returns the attacks by the given piece
@@ -408,5 +423,19 @@ inline Bitboard flippedDiagA1H8(Bitboard x) {
    x ^=       t ^ (t >>  7) ;
    return x;
 }
+
+inline Bitboard nth_set_bb(Bitboard x, int n) {
+    return _pdep_u64(1ULL << n, x);
+}
+inline Bitboard nth_unset_bb(Bitboard x, int n) {
+    return _pdep_u64(1ULL << n, ~x);
+}
+inline Square nth_set_sq(Bitboard x, int n) {
+    return lsb(nth_set_bb(x,n));
+}
+inline Square nth_unset_sq(Bitboard x, int n) {
+    return lsb(nth_unset_bb(x,n));
+}
+
 
 #endif  // #ifndef BITBOARD_H_INCLUDED

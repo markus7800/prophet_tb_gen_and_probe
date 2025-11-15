@@ -20,8 +20,8 @@
 void test_index() {
 
     // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
-    int wpieces[6] = {0, 0, 1, 0, 0, 1};
-    int bpieces[6] = {0, 0, 0, 1, 0, 0};
+    int wpieces[6] = {0, 0, 2, 0, 0, 0};
+    int bpieces[6] = {0, 0, 0, 0, 0, 0};
 
     uint64_t count = 0;
     for (Color stm: {WHITE, BLACK}) {
@@ -55,33 +55,38 @@ void test_index() {
         for (Square k1_sq = SQ_A1; k1_sq <= SQ_H8; ++k1_sq) {
             for (Square k2_sq = SQ_A1; k2_sq <= SQ_H8; ++k2_sq) {
                 if (k2_sq == k1_sq) { continue; }
-                for (Square p1_sq = SQ_A1; p1_sq <= SQ_H8; ++p1_sq) {
-                    if (p1_sq == k1_sq || p1_sq == k2_sq) { continue; }
-                    for (Square p2_sq = SQ_A1; p2_sq <= SQ_H8; ++p2_sq) {
-                        if (p2_sq == k1_sq || p2_sq == k2_sq || p2_sq == p1_sq) { continue; }
-                        for (Square p3_sq = SQ_A1; p3_sq <= SQ_H8; ++p3_sq) {
-                            if (p3_sq == k1_sq || p3_sq == k2_sq || p3_sq == p1_sq || p3_sq == p2_sq) { continue; }
-                        //     for (Square p4_sq = SQ_A1; p4_sq <= SQ_H8; ++p4_sq) {
-                        //         if (p4_sq == k1_sq || p4_sq == k2_sq || p4_sq == p1_sq || p4_sq == p2_sq || p4_sq == p3_sq) { continue; }
+                for (Square p1_sq = SQ_A1; p1_sq <= SQ_NONE; ++p1_sq) {
+                    if ((pts[0] == NO_PIECE_TYPE) != (p1_sq == SQ_NONE)) { continue; }
+                    if (pts[0] == PAWN && !(p1_sq & PawnSquaresBB)) { continue; }
+                    if (p1_sq != SQ_NONE && (p1_sq == k1_sq || p1_sq == k2_sq)) { continue; }
+                    for (Square p2_sq = SQ_A1; p2_sq <= SQ_NONE; ++p2_sq) {
+                        if ((pts[1] == NO_PIECE_TYPE) != (p2_sq == SQ_NONE)) { continue; }
+                        if (pts[1] == PAWN && !(p2_sq & PawnSquaresBB)) { continue; }
+                        if (p2_sq != SQ_NONE && (p2_sq == k1_sq || p2_sq == k2_sq || p2_sq == p1_sq)) { continue; }
+                        for (Square p3_sq = SQ_A1; p3_sq <= SQ_NONE; ++p3_sq) {
+                            if ((pts[2] == NO_PIECE_TYPE) != (p3_sq == SQ_NONE)) { continue; }
+                            if (pts[2] == PAWN && !(p3_sq & PawnSquaresBB)) { continue; }
+                            if (p3_sq != SQ_NONE && (p3_sq == k1_sq || p3_sq == k2_sq || p3_sq == p1_sq || p3_sq == p2_sq)) { continue; }
+                            for (Square p4_sq = SQ_A1; p4_sq <= SQ_NONE; ++p4_sq) {
+                                if ((pts[3] == NO_PIECE_TYPE) != (p4_sq == SQ_NONE)) { continue; }
+                                if (pts[3] == PAWN && !(p4_sq & PawnSquaresBB)) { continue; }
+                                if (p4_sq != SQ_NONE && (p4_sq == k1_sq || p4_sq == k2_sq || p4_sq == p1_sq || p4_sq == p2_sq || p4_sq == p3_sq)) { continue; }
 
                                 if ((PseudoAttacks[KING][k1_sq] & k2_sq) == 0) {
                                     pos1.reset();
                                     pos2.reset();
                                     pos3.reset();
                                     pos4.reset();
-                                    pos1.put_piece(make_piece(stm, KING), k1_sq);
-                                    pos1.put_piece(make_piece(~stm,KING), k2_sq);
-                                    if (pts[0] == PAWN && !(p1_sq & PawnSquaresBB)) { continue; }
-                                    pos1.put_piece(make_piece(cs[0],pts[0]), p1_sq);
-                                    if (pts[1] == PAWN && !(p2_sq & PawnSquaresBB)) { continue; }
-                                    pos1.put_piece(make_piece(cs[1],pts[1]), p2_sq);
-                                    if (pts[2] == PAWN && !(p3_sq & PawnSquaresBB)) { continue; }
-                                    pos1.put_piece(make_piece(cs[2],pts[2]), p3_sq);
-                                    // if (pts[3] == PAWN && !(p4_sq & PawnSquaresBB)) { continue; }
-                                    // pos1.put_piece(make_piece(cs[3],pts[3]), p4_sq);
+                                    pos1.put_piece(make_piece(~stm, KING), k1_sq);
+                                    pos1.put_piece(make_piece(stm,KING), k2_sq);
+                                    if (pts[0] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[0],pts[0]), p1_sq);
+                                    if (pts[1] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[1],pts[1]), p2_sq);
+                                    if (pts[2] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[2],pts[2]), p3_sq);
+                                    if (pts[3] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[3],pts[3]), p4_sq);
                                     pos1.set_side_to_move(stm);
+                                    if (pos1.sntm_in_check()) { continue; }
 
-                                    uint64_t ix = ix_from_pos(pos1, egtb.num_nonep_pos, egtb.num_ep_pos);
+                                    uint64_t ix = egtb.ix_from_pos(pos1);
 
                                     // bool verbose = true;
                                     bool verbose = false;
@@ -96,13 +101,13 @@ void test_index() {
 
                                     if (verbose) std::cout << "A ix from pos\n";
                                     if (verbose) std::cout << "B pos at ix " << ix << "\n";
-                                    pos_at_ix(pos2, ix, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
+                                    egtb.pos_at_ix(pos2, ix, stm);
                                     if (verbose) std::cout << "C transform to canonical\n";
                                     transform_to_canoncial(pos1, pos3);
                                     if (verbose) std::cout << "D ix from canonical\n";
-                                    uint64_t ix2 = ix_from_pos(pos3, egtb.num_nonep_pos, egtb.num_ep_pos);
+                                    uint64_t ix2 = egtb.ix_from_pos(pos3);
                                     if (verbose) std::cout << "E transformed pos at ix " << ix2 << "\n";
-                                    pos_at_ix(pos4, ix2, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
+                                    egtb.pos_at_ix(pos4, ix2, stm);
                                     if (verbose) std::cout << "F\n";
 
                                     if (!pos2.is_equal(pos3) || ix != ix2 || !pos3.is_equal(pos4) || debug) {
@@ -118,7 +123,7 @@ void test_index() {
                                     count++;
                                     // std::cout << "\n";
                                 }
-                        //     }
+                            }
                         }
                     }
                 }
@@ -177,15 +182,15 @@ void test_ep_index() {
 
 
                     if (verbose) std::cout << "A ix from pos\n";
-                    uint64_t ix = ix_from_pos(pos1, egtb.num_nonep_pos, egtb.num_ep_pos);
+                    uint64_t ix = egtb.ix_from_pos(pos1);
                     if (verbose) std::cout << "B pos at ix " << ix << "\n";
-                    pos_at_ix(pos2, ix, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
+                    egtb.pos_at_ix(pos2, ix, stm);
                     if (verbose) std::cout << "C transform to canonical\n";
                     transform_to_canoncial(pos1, pos3);
                     if (verbose) std::cout << "D ix from canonical\n";
-                    uint64_t ix2 = ix_from_pos(pos3, egtb.num_nonep_pos, egtb.num_ep_pos);
+                    uint64_t ix2 = egtb.ix_from_pos(pos3);
                     if (verbose) std::cout << "E transformed pos at ix " << ix2 << "\n";
-                    pos_at_ix(pos4, ix2, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
+                    egtb.pos_at_ix(pos4, ix2, stm);
                     if (verbose) std::cout << "F\n";
 
                     if (!pos2.is_equal(pos3) || ix != ix2 || !pos3.is_equal(pos4) || debug) {
@@ -224,8 +229,8 @@ void test_pawn_index() {
 
         for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
             pos.reset();
-            pos_at_ix(pos, ix, stm, wpieces, bpieces, egtb.num_nonep_pos, egtb.num_ep_pos);
-            uint64_t ix2 = ix_from_pos(pos, egtb.num_nonep_pos, egtb.num_ep_pos);
+            egtb.pos_at_ix(pos, ix, stm);
+            uint64_t ix2 = egtb.ix_from_pos(pos);
             if (pos.stm_in_check()) {
                 continue;
             }
@@ -256,7 +261,7 @@ void unplace_piece(Piece p, int* pieces1, int* pieces2) {
 int main(int argc, char *argv[]) {
     // single threaded: 3m15s
     Bitboards::init();
-    enumerate_kkx();
+    // enumerate_kkx();
     init_kkx_table();
     init_tril();
 
@@ -272,7 +277,31 @@ int main(int argc, char *argv[]) {
     exit(0);
 
 
+    // Bitboard unblockable_checks = unblockablechecks_bb(SQ_D2, B_PAWN);
+    // std::cout << Bitboards::pretty(unblockable_checks) << std::endl;
+    // exit(0);
+
+    uint64_t count = 0;
+    for (int ix = 0; ix < 10; ix++) {
+        Square kntm_sq = Square(IX_TO_KNTM_SQ[ix]);
+        std::cout << ix << ": " << square_to_uci(kntm_sq) << " " << int(kntm_sq_to_ix(kntm_sq)) << std::endl;
+        if (square_bb(kntm_sq) & DiagBB) {
+            // count += popcount((DiagBB | BelowDiagBB) & (~unblockablechecks_bb(kntm_sq, KING)) & ~square_bb(kntm_sq));
+            int val1 =  36 - 6 + 3 * (kntm_sq == SQ_A1);
+            int val2 = popcount((DiagBB | BelowDiagBB) & (~unblockablechecks_bb(kntm_sq, KING)) & ~square_bb(kntm_sq));
+            assert (val1 == val2);
+            count += val1;
+        } else {
+            count += 64 - num_unblockablechecks(kntm_sq, KING) - 1;
+        }
+    }
+    std::cout << "count: " << count << std::endl;
+
+    exit(0);
+
     EGPosition pos;
+
+
     /*
     pos.reset();
     pos.put_piece(W_KING, SQ_A1);
@@ -478,7 +507,7 @@ int main(int argc, char *argv[]) {
                                             std::cout << "no win." << std::endl;
                                         } else {
                                             pos.reset();
-                                            pos_at_ix(pos, longest_mate_ix, WHITE, &pieces1[0], &pieces2[0], egtb.num_nonep_pos, egtb.num_nonep_pos);
+                                            egtb.pos_at_ix(pos, longest_mate_ix, WHITE);
                                             std::cout << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
                                             if (longest_mate < longest_overall_mate) {
                                                 longest_overall_mate = longest_mate;

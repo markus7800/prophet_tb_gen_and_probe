@@ -52,17 +52,37 @@ std::string get_egtb_identifier(int stm_pieces[6], int sntm_pieces[6]) {
 struct EGTB {
     std::string id;
     int16_t* TB;
+    int stm_pieces[6];
+    int sntm_pieces[6];
+    uint64_t kntm_poscounts[11];
     uint64_t num_nonep_pos;
     uint64_t num_ep_pos;
     uint64_t num_pos;
     std::string filename;
     size_t filesize;
     bool mmaped;
-    EGTB(int stm_pieces[6], int sntm_pieces[6]) {
+    EGTB(int stm_pieces_[6], int sntm_pieces_[6]) {
+        for (int i = 0; i < 6; i++) {
+            stm_pieces[i] = stm_pieces_[i];
+            sntm_pieces[i] = sntm_pieces_[i];
+        }
         id = get_egtb_identifier(stm_pieces, sntm_pieces);
-        num_nonep_pos = compute_num_nonep_positions(stm_pieces, sntm_pieces);
+        compute_kntm_poscounts(stm_pieces, sntm_pieces, kntm_poscounts);
+        num_nonep_pos = kntm_poscounts[10];
         num_ep_pos = compute_num_ep_positions(stm_pieces, sntm_pieces);
         num_pos = num_nonep_pos + num_ep_pos;
+    }
+
+    void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) {
+        if (stm == WHITE) {
+            pos_at_ix_(pos, ix, stm, this->stm_pieces, this->sntm_pieces, this->num_nonep_pos, this->num_ep_pos, this->kntm_poscounts);
+        } else {
+            pos_at_ix_(pos, ix, stm, this->sntm_pieces, this->stm_pieces, this->num_nonep_pos, this->num_ep_pos, this->kntm_poscounts);
+        }
+    }
+
+    uint64_t ix_from_pos(EGPosition const &pos) {
+        return ix_from_pos_(pos, this->num_nonep_pos, this->num_ep_pos, this->kntm_poscounts);
     }
 };
 
@@ -392,7 +412,7 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
 
     if (verbose) std::cout << pos << pos.fen() << std::endl;
 
-    uint64_t ix = ix_from_pos(pos, egtb->num_nonep_pos, egtb->num_ep_pos);
+    uint64_t ix = egtb->ix_from_pos(pos);
     int16_t tb_val = egtb->TB[ix];
 
     int16_t max_val = LOSS_IN(0);
@@ -402,7 +422,7 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
         UndoInfo u = pos.do_move(move);
         PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
         EGTB* cap_egtb = CAPTURE_TBs[promotion][u.captured];
-        uint64_t fwd_ix = ix_from_pos(pos, cap_egtb->num_nonep_pos, cap_egtb->num_ep_pos);
+        uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
         val = cap_egtb->TB[fwd_ix];
         if (u.captured) {
             if (verbose) std::cout << "  " << move_to_uci(move) << "x " << val << " at ix: " << fwd_ix << std::endl;
@@ -477,10 +497,10 @@ void GenEGTB::gen(int nthreads) {
         for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
             EGPosition pos;
             pos.reset();
-            pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
+            LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
             bool sntm_in_check = pos.sntm_in_check();
 
-            if (ix_from_pos(pos, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos) != ix || sntm_in_check) {
+            if (LOSS_EGTB->ix_from_pos(pos) != ix || sntm_in_check) {
                 LOSS_EGTB->TB[ix] = UNUSED;
                 N_UNUSED++;
                 N_SNTM_IN_CHECK += sntm_in_check;
@@ -517,7 +537,7 @@ void GenEGTB::gen(int nthreads) {
                         has_full_eval = false;
                     } else {
                         EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
-                        uint64_t fwd_ix = ix_from_pos(pos, cap_egtb->num_nonep_pos, cap_egtb->num_ep_pos);
+                        uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
                         max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
                         has_partial_eval = true;
                     }
@@ -588,13 +608,13 @@ void GenEGTB::gen(int nthreads) {
                 EGPosition pos;
                 if (LOSS_EGTB->TB[ix] == LOSS_IN(LEVEL-1)) {
                     pos.reset();
-                    pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
+                    LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
                     assert (!pos.sntm_in_check());
                     if (ix > LOSS_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
 
                     for (Move move : EGMoveList<REVERSE>(pos)) {
                         pos.do_rev_move(move);
-                        uint64_t win_ix = ix_from_pos(pos, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos);
+                        uint64_t win_ix = WIN_EGTB->ix_from_pos(pos);
                         if (!IS_SET(WIN_EGTB->TB[win_ix]) || WIN_EGTB->TB[win_ix] < WIN_IN(LEVEL) ) {
                             WIN_EGTB->TB[win_ix] = WIN_IN(LEVEL);
                         }
@@ -604,7 +624,7 @@ void GenEGTB::gen(int nthreads) {
                                 Square ep_sq = pop_lsb(ep_candiates);
                                 if (pos.check_ep(ep_sq)) {
                                     pos.set_ep_square(ep_sq);
-                                    uint64_t ep_win_ix = ix_from_pos(pos, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos);
+                                    uint64_t ep_win_ix = WIN_EGTB->ix_from_pos(pos);
                                     if (!IS_SET(WIN_EGTB->TB[ep_win_ix]) || WIN_EGTB->TB[ep_win_ix] < WIN_IN(LEVEL) ) {
                                         WIN_EGTB->TB[ep_win_ix] = WIN_IN(LEVEL);
                                     }
@@ -622,7 +642,7 @@ void GenEGTB::gen(int nthreads) {
                 if (WIN_EGTB->TB[win_ix] == WIN_IN(LEVEL)) {
                     EGPosition pos;
                     pos.reset();
-                    pos_at_ix(pos, win_ix, ~LOSS_COLOR, wpieces, bpieces, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos); // not much slower
+                    WIN_EGTB->pos_at_ix(pos, win_ix, ~LOSS_COLOR); // not much slower
                     if (pos.sntm_in_check()) {
                         std::cout << win_ix << " " << WIN_EGTB->TB[win_ix] << pos;
                         assert (!pos.sntm_in_check());
@@ -632,7 +652,7 @@ void GenEGTB::gen(int nthreads) {
 
                     for (Move move : EGMoveList<REVERSE>(pos)) {
                         pos.do_rev_move(move);
-                        uint64_t maybe_loss_ix = ix_from_pos(pos, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
+                        uint64_t maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
                         if (!IS_SET(LOSS_EGTB->TB[maybe_loss_ix])) {
                             if (LOSS_EGTB->TB[maybe_loss_ix] == UNKNOWN) {
                                 LOSS_EGTB->TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
@@ -653,7 +673,7 @@ void GenEGTB::gen(int nthreads) {
                                 Square ep_sq = pop_lsb(ep_candiates);
                                 if (pos.check_ep(ep_sq)) {
                                     pos.set_ep_square(ep_sq);
-                                    uint64_t ep_maybe_loss_ix = ix_from_pos(pos, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
+                                    uint64_t ep_maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
                                     if (!IS_SET(LOSS_EGTB->TB[ep_maybe_loss_ix])) {
                                         if (LOSS_EGTB->TB[ep_maybe_loss_ix] == UNKNOWN) {
                                             LOSS_EGTB->TB[ep_maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
@@ -695,7 +715,7 @@ void GenEGTB::gen(int nthreads) {
                 EGPosition pos;
                 if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL)) {
                     pos.reset();
-                    pos_at_ix(pos, ix, LOSS_COLOR, wpieces, bpieces, LOSS_EGTB->num_nonep_pos, LOSS_EGTB->num_ep_pos);
+                    LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
                     assert (!pos.sntm_in_check());
                     if (ix > LOSS_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
 
@@ -713,7 +733,7 @@ void GenEGTB::gen(int nthreads) {
                             PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
 
                             if (!promotion && !u.captured) {
-                                uint64_t fwd_ix = ix_from_pos(pos, WIN_EGTB->num_nonep_pos, WIN_EGTB->num_ep_pos);
+                                uint64_t fwd_ix = WIN_EGTB->ix_from_pos(pos);
                                 int16_t val = WIN_EGTB->TB[fwd_ix];
                                 if (val == UNKNOWN) {
                                     max_val = 0;
@@ -768,7 +788,7 @@ void GenEGTB::gen(int nthreads) {
             EGPosition pos;
             if ((ix < WTM_EGTB->num_pos) && (WTM_EGTB->TB[ix] == LOSS_IN(LEVEL) || WTM_EGTB->TB[ix] == WIN_IN(LEVEL))) {
                 pos.reset();
-                pos_at_ix(pos, ix, WHITE, wpieces, bpieces, WTM_EGTB->num_nonep_pos, WTM_EGTB->num_ep_pos);
+                WTM_EGTB->pos_at_ix(pos, ix, WHITE);
                 assert (!pos.sntm_in_check());
                 if (ix > WTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
                 check_consistency(pos, false);
@@ -781,7 +801,7 @@ void GenEGTB::gen(int nthreads) {
         EGPosition pos;
         if (ix < WTM_EGTB->num_pos && WTM_EGTB->TB[ix] == 0) {
             pos.reset();
-            pos_at_ix(pos, ix, WHITE, wpieces, bpieces, WTM_EGTB->num_nonep_pos, WTM_EGTB->num_ep_pos);
+            WTM_EGTB->pos_at_ix(pos, ix, WHITE);
             assert (!pos.sntm_in_check());
             if (ix > WTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
             check_consistency(pos, false);
@@ -796,7 +816,7 @@ void GenEGTB::gen(int nthreads) {
             EGPosition pos;
             if ((ix < BTM_EGTB->num_pos) && (BTM_EGTB->TB[ix] == LOSS_IN(LEVEL) || BTM_EGTB->TB[ix] == WIN_IN(LEVEL))) {
                 pos.reset();
-                pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
+                BTM_EGTB->pos_at_ix(pos, ix, BLACK);
                 assert (!pos.sntm_in_check());
                 if (ix > BTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
                 check_consistency(pos, false);
@@ -810,7 +830,7 @@ void GenEGTB::gen(int nthreads) {
         EGPosition pos;
         if (ix < BTM_EGTB->num_pos && BTM_EGTB->TB[ix] == 0) {
             pos.reset();
-            pos_at_ix(pos, ix, BLACK, wpieces, bpieces, BTM_EGTB->num_nonep_pos, BTM_EGTB->num_ep_pos);
+            BTM_EGTB->pos_at_ix(pos, ix, BLACK);
             assert (!pos.sntm_in_check());
             if (ix > BTM_EGTB->num_nonep_pos) assert (pos.check_ep(pos.ep_square()));
             check_consistency(pos, false);

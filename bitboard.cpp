@@ -30,6 +30,8 @@ uint8_t SquareDistance[SQUARE_NB][SQUARE_NB];
 Bitboard LineBB[SQUARE_NB][SQUARE_NB];
 Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
 Bitboard PseudoAttacks[PIECE_TYPE_NB][SQUARE_NB];
+Bitboard UnblockableChecks[PIECE_TYPE_NB][SQUARE_NB];
+int UnblockableChecksCount[PIECE_TYPE_NB][SQUARE_NB];
 
 alignas(64) Magic Magics[SQUARE_NB][2];
 
@@ -106,6 +108,17 @@ void Bitboards::init() {
                 }
                 BetweenBB[s1][s2] |= s2;
             }
+    }
+
+    for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
+        for (PieceType pt = KNIGHT; pt <= KING; ++pt) {
+            UnblockableChecks[pt][sq] = PseudoAttacks[pt][sq] & PseudoAttacks[KING][sq];
+            UnblockableChecksCount[pt][sq] = popcount(UnblockableChecks[pt][sq]);
+        }
+        for (Color c: {WHITE, BLACK}) {
+            UnblockableChecks[c][sq] = PseudoAttacks[~c][sq] & PseudoAttacks[KING][sq] & ~(Rank1BB | Rank8BB); // have to flip pawn attacks
+            UnblockableChecksCount[c][sq] = popcount(UnblockableChecks[c][sq]);
+        }
     }
 }
 

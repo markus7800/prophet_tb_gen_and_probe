@@ -9,87 +9,24 @@
 #include "uci.h"
 
 
-Square KSQs_NP_HALF_OCT[10] = {
-    SQ_A1, SQ_B1, SQ_C1, SQ_D1,
-           SQ_B2, SQ_C2, SQ_D2,
-                  SQ_C3, SQ_D3,
-                         SQ_D4
-};
+const int8_t IX_TO_KNTM_SQ[10] = { 0, 1, 2, 3, 9, 10, 11, 18, 19, 27};
 
-Square KSQs_NP_OCT[16] = {
-    SQ_A1, SQ_B1, SQ_C1, SQ_D1,
-    SQ_A2, SQ_B2, SQ_C2, SQ_D2,
-    SQ_A3, SQ_B3, SQ_C3, SQ_D3,
-    SQ_A4, SQ_B4, SQ_C4, SQ_D4
-};
-
-// 462 positions
-void _enumerate_kkx(int print_sqs) {
-    if (print_sqs == 1) {
-        std::cout << "int8_t KKX_KNTM_SQ[N_KKX] = {" << std::endl;
-    } else if (print_sqs == 2) {
-        std::cout << "int8_t KKX_KTM_SQ[N_KKX] = {" << std::endl;
-    }
-    int count = 0;
-    for (Square kntm_sq: KSQs_NP_HALF_OCT) {
-        for (Square ktm_sq = SQ_A1; ktm_sq <= SQ_H8; ++ktm_sq) {
-            if (
-                (int(rank_of(kntm_sq)) == int(file_of(kntm_sq))) &&
-                (int(rank_of(ktm_sq)) > int(file_of(ktm_sq)))
-            ) {
-                continue;
-            }
-            if (kntm_sq != ktm_sq && (PseudoAttacks[KING][kntm_sq] & ktm_sq) == 0) {
-                if (print_sqs == 1) {
-                    printf("%2d,", int(kntm_sq));
-                } else if (print_sqs == 2) {
-                    printf("%2d,", int(ktm_sq));
-                }
-                count++;
-            }
-        }
-        if (print_sqs > 0) { std::cout << std::endl; } 
-    }
-    if (print_sqs > 0) {
-        std::cout << "};" << std::endl;
-    } else {
-        std::cout << "KK Count: " << count << std::endl;
-    }
+inline int8_t kntm_sq_to_ix(Square kntm_sq) {
+    int8_t x = kntm_sq;
+    return x - (((9 + (x>>3)) * (x >> 3)) >> 1);
 }
-void enumerate_kkx() {
-    std::cout << "#define N_KKX 462" << std::endl;;
-    _enumerate_kkx(1);
-    _enumerate_kkx(2);
-}
-
-
-#define N_KKX 462
-int8_t KKX_KNTM_SQ[N_KKX] = {
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
- 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
- 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
- 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
-10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,
-11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,
-18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,
-19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,
-27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,27,
-};
-int8_t KKX_KTM_SQ[N_KKX] = {
- 2, 3, 4, 5, 6, 7,10,11,12,13,14,15,18,19,20,21,22,23,27,28,29,30,31,36,37,38,39,45,46,47,54,55,63,
- 3, 4, 5, 6, 7,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
- 0, 4, 5, 6, 7, 8,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
- 0, 1, 5, 6, 7, 8, 9,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
- 3, 4, 5, 6, 7,11,12,13,14,15,19,20,21,22,23,27,28,29,30,31,36,37,38,39,45,46,47,54,55,63,
- 0, 4, 5, 6, 7, 8,12,13,14,15,16,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
- 0, 1, 5, 6, 7, 8, 9,13,14,15,16,17,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
- 0, 1, 2, 3, 4, 5, 6, 7,12,13,14,15,20,21,22,23,28,29,30,31,36,37,38,39,45,46,47,54,55,63,
- 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,13,14,15,16,17,21,22,23,24,25,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
- 0, 1, 2, 3, 4, 5, 6, 7, 9,10,11,12,13,14,15,21,22,23,29,30,31,37,38,39,45,46,47,54,55,63,
-};
 
 int16_t KKX_IX_TABLE[64][64];
+
+inline int8_t get_kkx_ktm_ix(Square ktm, Square kntm) {
+    int8_t kkx_ix = KKX_IX_TABLE[ktm][kntm];
+    if (kkx_ix == -1) {
+        printf("Tried to access KKX_IX_TABLE[%d][%d] = -1\n", ktm, kntm);
+        assert(false);
+    } else {
+        return kkx_ix;
+    }
+}
 
 void init_kkx_table() {
 
@@ -112,51 +49,52 @@ void init_kkx_table() {
 
 
         for (Square ktm_sq = SQ_A1; ktm_sq <= SQ_H8; ++ktm_sq) {
-            int8_t new_kntm_sq = int8_t(kntm_sq) ^ flip;
-            int8_t new_ktm_sq = int8_t(ktm_sq) ^ flip;
+            Square new_kntm_sq = Square(int8_t(kntm_sq) ^ flip);
+            Square new_ktm_sq = Square(int8_t(ktm_sq) ^ flip);
             int8_t swap = 0;
-            if (int8_t(rank_of((Square) new_kntm_sq)) > int8_t(file_of((Square) new_kntm_sq))) {
+            if (int8_t(rank_of(new_kntm_sq)) > int8_t(file_of(new_kntm_sq))) {
                 // sntm king is not in lower triangle a1 - d1 - d4
                 swap = 3;
             }
-            else if (int8_t(rank_of((Square) new_kntm_sq)) == int8_t(file_of((Square) new_kntm_sq))) {
+            else if (int8_t(rank_of(new_kntm_sq)) == int8_t(file_of(new_kntm_sq))) {
                 // sntm king is on diagonal a1 b2 c3 d4
-                if (int8_t(rank_of((Square) new_ktm_sq)) > int8_t(file_of((Square) new_ktm_sq))) {
+                if (int8_t(rank_of(new_ktm_sq)) > int8_t(file_of(new_ktm_sq))) {
                     // for stm king to be on lower triangle a1 - h1 - h8
                     swap = 3;
                 }
             }
-            new_ktm_sq = ((new_ktm_sq >> swap) | (new_ktm_sq << swap)) & 63;
-            new_kntm_sq = ((new_kntm_sq >> swap) | (new_kntm_sq << swap)) & 63;
+            new_ktm_sq = Square((((int8_t)new_ktm_sq >> swap) | ((int8_t)new_ktm_sq << swap)) & 63);
+            new_kntm_sq = Square((((int8_t)new_kntm_sq >> swap) | ((int8_t)new_kntm_sq << swap)) & 63);
 
             
-            bool found = false;
-            int16_t ix = -1;
-            for (int i = 0; i < N_KKX; i++) {
-                if (KKX_KTM_SQ[i] == new_ktm_sq && KKX_KNTM_SQ[i] == new_kntm_sq) {
-                    ix = i;
-                    found = true;
-                }
-            }
-            if (found) {
+            if (new_ktm_sq == new_kntm_sq || (unblockablechecks_bb(new_kntm_sq, KING) & square_bb(new_ktm_sq))) {
+                KKX_IX_TABLE[ktm_sq][kntm_sq] = -1;
+            } else {
                 count++;
+
+                Bitboard available_squares = 0;
+                if (square_bb(new_kntm_sq) & DiagBB) {
+                    available_squares = (DiagBB | BelowDiagBB) & (~unblockablechecks_bb(new_kntm_sq, KING)) & ~square_bb(new_kntm_sq);
+                    assert(popcount(available_squares) ==  36 - 6 + 3 * (new_kntm_sq == SQ_A1));
+                } else {
+                    available_squares = ~(unblockablechecks_bb(new_kntm_sq,KING) | square_bb(new_kntm_sq));
+                    assert(popcount(available_squares) == (64 - num_unblockablechecks(new_kntm_sq,KING) - 1));
+
+                }
+                assert (square_bb(new_ktm_sq) & available_squares);
+
+                KKX_IX_TABLE[ktm_sq][kntm_sq] = (int) new_ktm_sq -  popcount((square_bb(new_ktm_sq) - 1) & ~available_squares);
+
+                
+                int8_t ktm_ix = get_kkx_ktm_ix(ktm_sq, kntm_sq);
+                assert (new_ktm_sq == nth_set_sq(available_squares, ktm_ix));
             }
-            // printf("KKX_IX_T_TABLE[%d][%d] = (%d,%d,%d)\n", ktm_sq, kntm_sq, ix, flip, swap);
-            KKX_IX_TABLE[ktm_sq][kntm_sq] = ix;
+
 
         }
     }
     std::cout << "init_kkx_table count: " << count << std::endl; // 3612
 }
 
-inline int16_t get_kkx_ix(Square ktm, Square kntm) {
-    int16_t kkx_ix = KKX_IX_TABLE[ktm][kntm];
-    if (kkx_ix == -1) {
-        printf("Tried to access KKX_IX_TABLE[%d][%d] = -1\n", ktm, kntm);
-        assert(false);
-    } else {
-        return kkx_ix;
-    }
-}
 
 #endif
