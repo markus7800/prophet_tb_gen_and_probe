@@ -821,6 +821,27 @@ void GenEGTB::gen(int nthreads) {
     TimePoint t3 = now();
     std::cout << "Finished consistency checks in " << (double) (t3 - t2)/ 1000.0 << "s." << std::endl;
 
+    for (int wtm = 0; wtm <= 1; ++wtm) {
+        EGTB* egtb = wtm ? WTM_EGTB : BTM_EGTB;
+
+        uint64_t wins = 0;
+        uint64_t draws = 0;
+        uint64_t losses = 0;
+        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:wins) reduction(+:draws) reduction(+:losses)
+        for (uint64_t ix = 0; ix < egtb->num_pos; ix++) {
+            if (egtb->TB[ix] == UNUSED) {
+                egtb->TB[ix] = 0; // can store 0 for unused for more efficient compression
+                continue; 
+            }
+            wins += (egtb->TB[ix] > 0);
+            draws += (egtb->TB[ix] == 0);
+            losses += (egtb->TB[ix] < 0);
+        }
+        std::cout << wins << " wins in " << egtb->id << std::endl;
+        std::cout << draws << " draws in " << egtb->id << std::endl;
+        std::cout << losses << " losses in " << egtb->id << std::endl;
+    }
+    
     store_egtb(WTM_EGTB, folder);
     store_egtb(BTM_EGTB, folder);
     std::cout << "Stored " << WTM_EGTB->id << " and " << BTM_EGTB->id << std::endl;

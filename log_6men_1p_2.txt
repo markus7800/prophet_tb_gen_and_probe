@@ -924,3 +924,929 @@ BTM Consistency check passed for level 284
 BTM Consistency check passed for draws
 Finished consistency checks in 21569.8s.
 main: gen_egtb.h:85: void store_egtb(EGTB*, std::string): Assertion `IS_SET(val)' failed.
+init_kkx_table count: 3612
+KNNNPK and KKNNNP already exist.
+KBNNPK and KKBNNP already exist.
+KRNNPK and KKRNNP already exist.
+KQNNPK and KKQNNP already exist.
+KNNPKN and KNKNNP already exist.
+KNNPKB and KBKNNP already exist.
+KNNPKR and KRKNNP already exist.
+KNNPKQ and KQKNNP already exist.
+KBBNPK and KKBBNP already exist.
+KRBNPK and KKRBNP already exist.
+KQBNPK and KKQBNP already exist.
+KBNPKN and KNKBNP already exist.
+KBNPKB and KBKBNP already exist.
+Generate 20243079360 KBNPKR and 20243079360 KRKBNP
+White pieces: KBNP
+Black pieces: KR
+Archive:  egtbs/KBNKR.egtb.zip
+  inflating: egtbs/KBNKR.egtb        
+Loaded KBNKR for white P captured, white to move
+Archive:  egtbs/KBPKR.egtb.zip
+  inflating: egtbs/KBPKR.egtb        
+Loaded KBPKR for white N captured, white to move
+Archive:  egtbs/KNPKR.egtb.zip
+  inflating: egtbs/KNPKR.egtb        
+Loaded KNPKR for white B captured, white to move
+Archive:  egtbs/KKBNP.egtb.zip
+  inflating: egtbs/KKBNP.egtb        
+Loaded KKBNP for black R captured, black to move
+Archive:  egtbs/KRKBNN.egtb.zip
+  inflating: egtbs/KRKBNN.egtb       
+Loaded KRKBNN for white promotion to N, black to move
+Archive:  egtbs/KRKBBN.egtb.zip
+  inflating: egtbs/KRKBBN.egtb       
+Loaded KRKBBN for white promotion to B, black to move
+Archive:  egtbs/KRKRBN.egtb.zip
+  inflating: egtbs/KRKRBN.egtb       
+Loaded KRKRBN for white promotion to R, black to move
+Archive:  egtbs/KRKQBN.egtb.zip
+  inflating: egtbs/KRKQBN.egtb       
+Loaded KRKQBN for white promotion to Q, black to move
+Archive:  egtbs/KKBNN.egtb.zip
+  inflating: egtbs/KKBNN.egtb        
+Load KKBNN for black R captured with white promotion to N, black to move
+Archive:  egtbs/KKBBN.egtb.zip
+  inflating: egtbs/KKBBN.egtb        
+Load KKBBN for black R captured with white promotion to B, black to move
+Archive:  egtbs/KKRBN.egtb.zip
+  inflating: egtbs/KKRBN.egtb        
+Load KKRBN for black R captured with white promotion to R, black to move
+Archive:  egtbs/KKQBN.egtb.zip
+  inflating: egtbs/KKQBN.egtb        
+Load KKQBN for black R captured with white promotion to Q, black to move
+Stats for KRKBNP:
+    # Non-EP positions: 20243079360 (100%)
+    # EP positions: 0 (0%)
+    Checkmate count: 761553 (0.00376204%)
+    5669496104 unused indices (28.0071%)
+    5669496104 of which sntm in check (28.0071%)
+Stats for KBNPKR:
+    # Non-EP positions: 20243079360 (100%)
+    # EP positions: 0 (0%)
+    Checkmate count: 6289496 (0.0310699%)
+    6092445735 unused indices (30.0964%)
+    6092445735 of which sntm in check (30.0964%)
+Finished checkmate init in 921.752s.
+MIN_LEVEL = 151
+49178734 positions at level 1
+2922576 positions at level 2
+21391581 positions at level 3
+1603530 positions at level 4
+25460462 positions at level 5
+1345386 positions at level 6
+49045023 positions at level 7
+2606307 positions at level 8
+130918313 positions at level 9
+8322571 positions at level 10
+306404878 positions at level 11
+23351934 positions at level 12
+510478698 positions at level 13
+51396782 positions at level 14
+606811020 positions at level 15
+77170660 positions at level 16
+671749959 positions at level 17
+108269641 positions at level 18
+692627313 positions at level 19
+133392734 positions at level 20
+657798313 positions at level 21
+136278038 positions at level 22
+590518951 positions at level 23
+127312552 positions at level 24
+488227901 positions at level 25
+117136788 positions at level 26
+378279956 positions at level 27
+103084049 positions at level 28
+284021034 positions at level 29
+84729180 positions at level 30
+193867600 positions at level 31
+64300945 positions at level 32
+127826404 positions at level 33
+49179613 positions at level 34
+97052816 positions at level 35
+39223739 positions at level 36
+79446947 positions at level 37
+31238721 positions at level 38
+63169602 positions at level 39
+25336635 positions at level 40
+53324484 positions at level 41
+22209154 positions at level 42
+49659116 positions at level 43
+22129437 positions at level 44
+49564596 positions at level 45
+24376170 positions at level 46
+50145251 positions at level 47
+27846191 positions at level 48
+52684053 positions at level 49
+32148917 positions at level 50
+61431363 positions at level 51
+40073525 positions at level 52
+77133440 positions at level 53
+53840520 positions at level 54
+101249943 positions at level 55
+78174016 positions at level 56
+134361422 positions at level 57
+115022024 positions at level 58
+166801285 positions at level 59
+154481578 positions at level 60
+187890365 positions at level 61
+178581446 positions at level 62
+198928051 positions at level 63
+183121732 positions at level 64
+208575399 positions at level 65
+177494411 positions at level 66
+213435221 positions at level 67
+164555193 positions at level 68
+212088503 positions at level 69
+147383858 positions at level 70
+206339534 positions at level 71
+130517944 positions at level 72
+197931110 positions at level 73
+115623422 positions at level 74
+187110864 positions at level 75
+103396886 positions at level 76
+174384864 positions at level 77
+93555923 positions at level 78
+160595445 positions at level 79
+85581772 positions at level 80
+146695480 positions at level 81
+78894529 positions at level 82
+133446932 positions at level 83
+73082812 positions at level 84
+121314269 positions at level 85
+67901938 positions at level 86
+110300076 positions at level 87
+63183049 positions at level 88
+100508513 positions at level 89
+58856230 positions at level 90
+91868107 positions at level 91
+54887468 positions at level 92
+84336029 positions at level 93
+51430153 positions at level 94
+77961438 positions at level 95
+48262685 positions at level 96
+72102185 positions at level 97
+45281619 positions at level 98
+66509799 positions at level 99
+42227828 positions at level 100
+60851943 positions at level 101
+39387312 positions at level 102
+56010962 positions at level 103
+37045887 positions at level 104
+52030362 positions at level 105
+35045443 positions at level 106
+48594821 positions at level 107
+33394906 positions at level 108
+45549103 positions at level 109
+31926065 positions at level 110
+42660727 positions at level 111
+30423071 positions at level 112
+39468613 positions at level 113
+28618288 positions at level 114
+35908495 positions at level 115
+26425998 positions at level 116
+31975937 positions at level 117
+23949322 positions at level 118
+28032468 positions at level 119
+21563948 positions at level 120
+24613863 positions at level 121
+19307005 positions at level 122
+21590537 positions at level 123
+17272092 positions at level 124
+19078275 positions at level 125
+15553584 positions at level 126
+17159208 positions at level 127
+14133529 positions at level 128
+15717016 positions at level 129
+12816474 positions at level 130
+14305466 positions at level 131
+11560536 positions at level 132
+12964921 positions at level 133
+10373334 positions at level 134
+11688698 positions at level 135
+9315210 positions at level 136
+10547593 positions at level 137
+8391821 positions at level 138
+9569426 positions at level 139
+7581000 positions at level 140
+8663109 positions at level 141
+6829156 positions at level 142
+7836461 positions at level 143
+6176598 positions at level 144
+7143477 positions at level 145
+5610979 positions at level 146
+6593722 positions at level 147
+5173739 positions at level 148
+6173360 positions at level 149
+4799880 positions at level 150
+5727508 positions at level 151
+4396672 positions at level 152
+5172628 positions at level 153
+3914374 positions at level 154
+4531526 positions at level 155
+3416037 positions at level 156
+3934413 positions at level 157
+2955042 positions at level 158
+3429234 positions at level 159
+2597019 positions at level 160
+3053233 positions at level 161
+2355653 positions at level 162
+2805682 positions at level 163
+2234293 positions at level 164
+2671063 positions at level 165
+2155379 positions at level 166
+2579523 positions at level 167
+2098834 positions at level 168
+2517707 positions at level 169
+2098087 positions at level 170
+2510497 positions at level 171
+2072831 positions at level 172
+2434143 positions at level 173
+1967573 positions at level 174
+2272314 positions at level 175
+1801454 positions at level 176
+2056345 positions at level 177
+1620806 positions at level 178
+1841854 positions at level 179
+1443629 positions at level 180
+1629625 positions at level 181
+1275135 positions at level 182
+1421310 positions at level 183
+1116680 positions at level 184
+1237749 positions at level 185
+971122 positions at level 186
+1073362 positions at level 187
+852596 positions at level 188
+940539 positions at level 189
+756711 positions at level 190
+829880 positions at level 191
+693302 positions at level 192
+755025 positions at level 193
+639086 positions at level 194
+693605 positions at level 195
+589098 positions at level 196
+631430 positions at level 197
+547171 positions at level 198
+570931 positions at level 199
+502224 positions at level 200
+524197 positions at level 201
+466881 positions at level 202
+481393 positions at level 203
+440674 positions at level 204
+447741 positions at level 205
+410479 positions at level 206
+413040 positions at level 207
+369784 positions at level 208
+367688 positions at level 209
+325570 positions at level 210
+318681 positions at level 211
+281399 positions at level 212
+272978 positions at level 213
+238161 positions at level 214
+229613 positions at level 215
+193594 positions at level 216
+184915 positions at level 217
+154726 positions at level 218
+148207 positions at level 219
+122640 positions at level 220
+114910 positions at level 221
+93878 positions at level 222
+87514 positions at level 223
+73474 positions at level 224
+68434 positions at level 225
+60247 positions at level 226
+54433 positions at level 227
+48547 positions at level 228
+42947 positions at level 229
+39945 positions at level 230
+37648 positions at level 231
+36946 positions at level 232
+36008 positions at level 233
+37515 positions at level 234
+38438 positions at level 235
+42725 positions at level 236
+43214 positions at level 237
+48980 positions at level 238
+46803 positions at level 239
+49590 positions at level 240
+44314 positions at level 241
+46320 positions at level 242
+40375 positions at level 243
+40869 positions at level 244
+36020 positions at level 245
+33043 positions at level 246
+31766 positions at level 247
+25884 positions at level 248
+27063 positions at level 249
+20602 positions at level 250
+24278 positions at level 251
+17146 positions at level 252
+21528 positions at level 253
+14550 positions at level 254
+17760 positions at level 255
+10942 positions at level 256
+13338 positions at level 257
+7728 positions at level 258
+9363 positions at level 259
+5555 positions at level 260
+6487 positions at level 261
+3921 positions at level 262
+5171 positions at level 263
+2739 positions at level 264
+3714 positions at level 265
+1564 positions at level 266
+2196 positions at level 267
+899 positions at level 268
+1193 positions at level 269
+450 positions at level 270
+591 positions at level 271
+208 positions at level 272
+291 positions at level 273
+134 positions at level 274
+211 positions at level 275
+98 positions at level 276
+189 positions at level 277
+61 positions at level 278
+154 positions at level 279
+12 positions at level 280
+23 positions at level 281
+1 positions at level 282
+0 positions at level 283
+0 positions at level 284
+Finished retrograde in 4842.27s.
+WTM Consistency check passed for level 0
+WTM Consistency check passed for level 1
+WTM Consistency check passed for level 2
+WTM Consistency check passed for level 3
+WTM Consistency check passed for level 4
+WTM Consistency check passed for level 5
+WTM Consistency check passed for level 6
+WTM Consistency check passed for level 7
+WTM Consistency check passed for level 8
+WTM Consistency check passed for level 9
+WTM Consistency check passed for level 10
+WTM Consistency check passed for level 11
+WTM Consistency check passed for level 12
+WTM Consistency check passed for level 13
+WTM Consistency check passed for level 14
+WTM Consistency check passed for level 15
+WTM Consistency check passed for level 16
+WTM Consistency check passed for level 17
+WTM Consistency check passed for level 18
+WTM Consistency check passed for level 19
+WTM Consistency check passed for level 20
+WTM Consistency check passed for level 21
+WTM Consistency check passed for level 22
+WTM Consistency check passed for level 23
+WTM Consistency check passed for level 24
+WTM Consistency check passed for level 25
+WTM Consistency check passed for level 26
+WTM Consistency check passed for level 27
+WTM Consistency check passed for level 28
+WTM Consistency check passed for level 29
+WTM Consistency check passed for level 30
+WTM Consistency check passed for level 31
+WTM Consistency check passed for level 32
+WTM Consistency check passed for level 33
+WTM Consistency check passed for level 34
+WTM Consistency check passed for level 35
+WTM Consistency check passed for level 36
+WTM Consistency check passed for level 37
+WTM Consistency check passed for level 38
+WTM Consistency check passed for level 39
+WTM Consistency check passed for level 40
+WTM Consistency check passed for level 41
+WTM Consistency check passed for level 42
+WTM Consistency check passed for level 43
+WTM Consistency check passed for level 44
+WTM Consistency check passed for level 45
+WTM Consistency check passed for level 46
+WTM Consistency check passed for level 47
+WTM Consistency check passed for level 48
+WTM Consistency check passed for level 49
+WTM Consistency check passed for level 50
+WTM Consistency check passed for level 51
+WTM Consistency check passed for level 52
+WTM Consistency check passed for level 53
+WTM Consistency check passed for level 54
+WTM Consistency check passed for level 55
+WTM Consistency check passed for level 56
+WTM Consistency check passed for level 57
+WTM Consistency check passed for level 58
+WTM Consistency check passed for level 59
+WTM Consistency check passed for level 60
+WTM Consistency check passed for level 61
+WTM Consistency check passed for level 62
+WTM Consistency check passed for level 63
+WTM Consistency check passed for level 64
+WTM Consistency check passed for level 65
+WTM Consistency check passed for level 66
+WTM Consistency check passed for level 67
+WTM Consistency check passed for level 68
+WTM Consistency check passed for level 69
+WTM Consistency check passed for level 70
+WTM Consistency check passed for level 71
+WTM Consistency check passed for level 72
+WTM Consistency check passed for level 73
+WTM Consistency check passed for level 74
+WTM Consistency check passed for level 75
+WTM Consistency check passed for level 76
+WTM Consistency check passed for level 77
+WTM Consistency check passed for level 78
+WTM Consistency check passed for level 79
+WTM Consistency check passed for level 80
+WTM Consistency check passed for level 81
+WTM Consistency check passed for level 82
+WTM Consistency check passed for level 83
+WTM Consistency check passed for level 84
+WTM Consistency check passed for level 85
+WTM Consistency check passed for level 86
+WTM Consistency check passed for level 87
+WTM Consistency check passed for level 88
+WTM Consistency check passed for level 89
+WTM Consistency check passed for level 90
+WTM Consistency check passed for level 91
+WTM Consistency check passed for level 92
+WTM Consistency check passed for level 93
+WTM Consistency check passed for level 94
+WTM Consistency check passed for level 95
+WTM Consistency check passed for level 96
+WTM Consistency check passed for level 97
+WTM Consistency check passed for level 98
+WTM Consistency check passed for level 99
+WTM Consistency check passed for level 100
+WTM Consistency check passed for level 101
+WTM Consistency check passed for level 102
+WTM Consistency check passed for level 103
+WTM Consistency check passed for level 104
+WTM Consistency check passed for level 105
+WTM Consistency check passed for level 106
+WTM Consistency check passed for level 107
+WTM Consistency check passed for level 108
+WTM Consistency check passed for level 109
+WTM Consistency check passed for level 110
+WTM Consistency check passed for level 111
+WTM Consistency check passed for level 112
+WTM Consistency check passed for level 113
+WTM Consistency check passed for level 114
+WTM Consistency check passed for level 115
+WTM Consistency check passed for level 116
+WTM Consistency check passed for level 117
+WTM Consistency check passed for level 118
+WTM Consistency check passed for level 119
+WTM Consistency check passed for level 120
+WTM Consistency check passed for level 121
+WTM Consistency check passed for level 122
+WTM Consistency check passed for level 123
+WTM Consistency check passed for level 124
+WTM Consistency check passed for level 125
+WTM Consistency check passed for level 126
+WTM Consistency check passed for level 127
+WTM Consistency check passed for level 128
+WTM Consistency check passed for level 129
+WTM Consistency check passed for level 130
+WTM Consistency check passed for level 131
+WTM Consistency check passed for level 132
+WTM Consistency check passed for level 133
+WTM Consistency check passed for level 134
+WTM Consistency check passed for level 135
+WTM Consistency check passed for level 136
+WTM Consistency check passed for level 137
+WTM Consistency check passed for level 138
+WTM Consistency check passed for level 139
+WTM Consistency check passed for level 140
+WTM Consistency check passed for level 141
+WTM Consistency check passed for level 142
+WTM Consistency check passed for level 143
+WTM Consistency check passed for level 144
+WTM Consistency check passed for level 145
+WTM Consistency check passed for level 146
+WTM Consistency check passed for level 147
+WTM Consistency check passed for level 148
+WTM Consistency check passed for level 149
+WTM Consistency check passed for level 150
+WTM Consistency check passed for level 151
+WTM Consistency check passed for level 152
+WTM Consistency check passed for level 153
+WTM Consistency check passed for level 154
+WTM Consistency check passed for level 155
+WTM Consistency check passed for level 156
+WTM Consistency check passed for level 157
+WTM Consistency check passed for level 158
+WTM Consistency check passed for level 159
+WTM Consistency check passed for level 160
+WTM Consistency check passed for level 161
+WTM Consistency check passed for level 162
+WTM Consistency check passed for level 163
+WTM Consistency check passed for level 164
+WTM Consistency check passed for level 165
+WTM Consistency check passed for level 166
+WTM Consistency check passed for level 167
+WTM Consistency check passed for level 168
+WTM Consistency check passed for level 169
+WTM Consistency check passed for level 170
+WTM Consistency check passed for level 171
+WTM Consistency check passed for level 172
+WTM Consistency check passed for level 173
+WTM Consistency check passed for level 174
+WTM Consistency check passed for level 175
+WTM Consistency check passed for level 176
+WTM Consistency check passed for level 177
+WTM Consistency check passed for level 178
+WTM Consistency check passed for level 179
+WTM Consistency check passed for level 180
+WTM Consistency check passed for level 181
+WTM Consistency check passed for level 182
+WTM Consistency check passed for level 183
+WTM Consistency check passed for level 184
+WTM Consistency check passed for level 185
+WTM Consistency check passed for level 186
+WTM Consistency check passed for level 187
+WTM Consistency check passed for level 188
+WTM Consistency check passed for level 189
+WTM Consistency check passed for level 190
+WTM Consistency check passed for level 191
+WTM Consistency check passed for level 192
+WTM Consistency check passed for level 193
+WTM Consistency check passed for level 194
+WTM Consistency check passed for level 195
+WTM Consistency check passed for level 196
+WTM Consistency check passed for level 197
+WTM Consistency check passed for level 198
+WTM Consistency check passed for level 199
+WTM Consistency check passed for level 200
+WTM Consistency check passed for level 201
+WTM Consistency check passed for level 202
+WTM Consistency check passed for level 203
+WTM Consistency check passed for level 204
+WTM Consistency check passed for level 205
+WTM Consistency check passed for level 206
+WTM Consistency check passed for level 207
+WTM Consistency check passed for level 208
+WTM Consistency check passed for level 209
+WTM Consistency check passed for level 210
+WTM Consistency check passed for level 211
+WTM Consistency check passed for level 212
+WTM Consistency check passed for level 213
+WTM Consistency check passed for level 214
+WTM Consistency check passed for level 215
+WTM Consistency check passed for level 216
+WTM Consistency check passed for level 217
+WTM Consistency check passed for level 218
+WTM Consistency check passed for level 219
+WTM Consistency check passed for level 220
+WTM Consistency check passed for level 221
+WTM Consistency check passed for level 222
+WTM Consistency check passed for level 223
+WTM Consistency check passed for level 224
+WTM Consistency check passed for level 225
+WTM Consistency check passed for level 226
+WTM Consistency check passed for level 227
+WTM Consistency check passed for level 228
+WTM Consistency check passed for level 229
+WTM Consistency check passed for level 230
+WTM Consistency check passed for level 231
+WTM Consistency check passed for level 232
+WTM Consistency check passed for level 233
+WTM Consistency check passed for level 234
+WTM Consistency check passed for level 235
+WTM Consistency check passed for level 236
+WTM Consistency check passed for level 237
+WTM Consistency check passed for level 238
+WTM Consistency check passed for level 239
+WTM Consistency check passed for level 240
+WTM Consistency check passed for level 241
+WTM Consistency check passed for level 242
+WTM Consistency check passed for level 243
+WTM Consistency check passed for level 244
+WTM Consistency check passed for level 245
+WTM Consistency check passed for level 246
+WTM Consistency check passed for level 247
+WTM Consistency check passed for level 248
+WTM Consistency check passed for level 249
+WTM Consistency check passed for level 250
+WTM Consistency check passed for level 251
+WTM Consistency check passed for level 252
+WTM Consistency check passed for level 253
+WTM Consistency check passed for level 254
+WTM Consistency check passed for level 255
+WTM Consistency check passed for level 256
+WTM Consistency check passed for level 257
+WTM Consistency check passed for level 258
+WTM Consistency check passed for level 259
+WTM Consistency check passed for level 260
+WTM Consistency check passed for level 261
+WTM Consistency check passed for level 262
+WTM Consistency check passed for level 263
+WTM Consistency check passed for level 264
+WTM Consistency check passed for level 265
+WTM Consistency check passed for level 266
+WTM Consistency check passed for level 267
+WTM Consistency check passed for level 268
+WTM Consistency check passed for level 269
+WTM Consistency check passed for level 270
+WTM Consistency check passed for level 271
+WTM Consistency check passed for level 272
+WTM Consistency check passed for level 273
+WTM Consistency check passed for level 274
+WTM Consistency check passed for level 275
+WTM Consistency check passed for level 276
+WTM Consistency check passed for level 277
+WTM Consistency check passed for level 278
+WTM Consistency check passed for level 279
+WTM Consistency check passed for level 280
+WTM Consistency check passed for level 281
+WTM Consistency check passed for level 282
+WTM Consistency check passed for level 283
+WTM Consistency check passed for level 284
+WTM Consistency check passed for draws
+BTM Consistency check passed for level 0
+BTM Consistency check passed for level 1
+BTM Consistency check passed for level 2
+BTM Consistency check passed for level 3
+BTM Consistency check passed for level 4
+BTM Consistency check passed for level 5
+BTM Consistency check passed for level 6
+BTM Consistency check passed for level 7
+BTM Consistency check passed for level 8
+BTM Consistency check passed for level 9
+BTM Consistency check passed for level 10
+BTM Consistency check passed for level 11
+BTM Consistency check passed for level 12
+BTM Consistency check passed for level 13
+BTM Consistency check passed for level 14
+BTM Consistency check passed for level 15
+BTM Consistency check passed for level 16
+BTM Consistency check passed for level 17
+BTM Consistency check passed for level 18
+BTM Consistency check passed for level 19
+BTM Consistency check passed for level 20
+BTM Consistency check passed for level 21
+BTM Consistency check passed for level 22
+BTM Consistency check passed for level 23
+BTM Consistency check passed for level 24
+BTM Consistency check passed for level 25
+BTM Consistency check passed for level 26
+BTM Consistency check passed for level 27
+BTM Consistency check passed for level 28
+BTM Consistency check passed for level 29
+BTM Consistency check passed for level 30
+BTM Consistency check passed for level 31
+BTM Consistency check passed for level 32
+BTM Consistency check passed for level 33
+BTM Consistency check passed for level 34
+BTM Consistency check passed for level 35
+BTM Consistency check passed for level 36
+BTM Consistency check passed for level 37
+BTM Consistency check passed for level 38
+BTM Consistency check passed for level 39
+BTM Consistency check passed for level 40
+BTM Consistency check passed for level 41
+BTM Consistency check passed for level 42
+BTM Consistency check passed for level 43
+BTM Consistency check passed for level 44
+BTM Consistency check passed for level 45
+BTM Consistency check passed for level 46
+BTM Consistency check passed for level 47
+BTM Consistency check passed for level 48
+BTM Consistency check passed for level 49
+BTM Consistency check passed for level 50
+BTM Consistency check passed for level 51
+BTM Consistency check passed for level 52
+BTM Consistency check passed for level 53
+BTM Consistency check passed for level 54
+BTM Consistency check passed for level 55
+BTM Consistency check passed for level 56
+BTM Consistency check passed for level 57
+BTM Consistency check passed for level 58
+BTM Consistency check passed for level 59
+BTM Consistency check passed for level 60
+BTM Consistency check passed for level 61
+BTM Consistency check passed for level 62
+BTM Consistency check passed for level 63
+BTM Consistency check passed for level 64
+BTM Consistency check passed for level 65
+BTM Consistency check passed for level 66
+BTM Consistency check passed for level 67
+BTM Consistency check passed for level 68
+BTM Consistency check passed for level 69
+BTM Consistency check passed for level 70
+BTM Consistency check passed for level 71
+BTM Consistency check passed for level 72
+BTM Consistency check passed for level 73
+BTM Consistency check passed for level 74
+BTM Consistency check passed for level 75
+BTM Consistency check passed for level 76
+BTM Consistency check passed for level 77
+BTM Consistency check passed for level 78
+BTM Consistency check passed for level 79
+BTM Consistency check passed for level 80
+BTM Consistency check passed for level 81
+BTM Consistency check passed for level 82
+BTM Consistency check passed for level 83
+BTM Consistency check passed for level 84
+BTM Consistency check passed for level 85
+BTM Consistency check passed for level 86
+BTM Consistency check passed for level 87
+BTM Consistency check passed for level 88
+BTM Consistency check passed for level 89
+BTM Consistency check passed for level 90
+BTM Consistency check passed for level 91
+BTM Consistency check passed for level 92
+BTM Consistency check passed for level 93
+BTM Consistency check passed for level 94
+BTM Consistency check passed for level 95
+BTM Consistency check passed for level 96
+BTM Consistency check passed for level 97
+BTM Consistency check passed for level 98
+BTM Consistency check passed for level 99
+BTM Consistency check passed for level 100
+BTM Consistency check passed for level 101
+BTM Consistency check passed for level 102
+BTM Consistency check passed for level 103
+BTM Consistency check passed for level 104
+BTM Consistency check passed for level 105
+BTM Consistency check passed for level 106
+BTM Consistency check passed for level 107
+BTM Consistency check passed for level 108
+BTM Consistency check passed for level 109
+BTM Consistency check passed for level 110
+BTM Consistency check passed for level 111
+BTM Consistency check passed for level 112
+BTM Consistency check passed for level 113
+BTM Consistency check passed for level 114
+BTM Consistency check passed for level 115
+BTM Consistency check passed for level 116
+BTM Consistency check passed for level 117
+BTM Consistency check passed for level 118
+BTM Consistency check passed for level 119
+BTM Consistency check passed for level 120
+BTM Consistency check passed for level 121
+BTM Consistency check passed for level 122
+BTM Consistency check passed for level 123
+BTM Consistency check passed for level 124
+BTM Consistency check passed for level 125
+BTM Consistency check passed for level 126
+BTM Consistency check passed for level 127
+BTM Consistency check passed for level 128
+BTM Consistency check passed for level 129
+BTM Consistency check passed for level 130
+BTM Consistency check passed for level 131
+BTM Consistency check passed for level 132
+BTM Consistency check passed for level 133
+BTM Consistency check passed for level 134
+BTM Consistency check passed for level 135
+BTM Consistency check passed for level 136
+BTM Consistency check passed for level 137
+BTM Consistency check passed for level 138
+BTM Consistency check passed for level 139
+BTM Consistency check passed for level 140
+BTM Consistency check passed for level 141
+BTM Consistency check passed for level 142
+BTM Consistency check passed for level 143
+BTM Consistency check passed for level 144
+BTM Consistency check passed for level 145
+BTM Consistency check passed for level 146
+BTM Consistency check passed for level 147
+BTM Consistency check passed for level 148
+BTM Consistency check passed for level 149
+BTM Consistency check passed for level 150
+BTM Consistency check passed for level 151
+BTM Consistency check passed for level 152
+BTM Consistency check passed for level 153
+BTM Consistency check passed for level 154
+BTM Consistency check passed for level 155
+BTM Consistency check passed for level 156
+BTM Consistency check passed for level 157
+BTM Consistency check passed for level 158
+BTM Consistency check passed for level 159
+BTM Consistency check passed for level 160
+BTM Consistency check passed for level 161
+BTM Consistency check passed for level 162
+BTM Consistency check passed for level 163
+BTM Consistency check passed for level 164
+BTM Consistency check passed for level 165
+BTM Consistency check passed for level 166
+BTM Consistency check passed for level 167
+BTM Consistency check passed for level 168
+BTM Consistency check passed for level 169
+BTM Consistency check passed for level 170
+BTM Consistency check passed for level 171
+BTM Consistency check passed for level 172
+BTM Consistency check passed for level 173
+BTM Consistency check passed for level 174
+BTM Consistency check passed for level 175
+BTM Consistency check passed for level 176
+BTM Consistency check passed for level 177
+BTM Consistency check passed for level 178
+BTM Consistency check passed for level 179
+BTM Consistency check passed for level 180
+BTM Consistency check passed for level 181
+BTM Consistency check passed for level 182
+BTM Consistency check passed for level 183
+BTM Consistency check passed for level 184
+BTM Consistency check passed for level 185
+BTM Consistency check passed for level 186
+BTM Consistency check passed for level 187
+BTM Consistency check passed for level 188
+BTM Consistency check passed for level 189
+BTM Consistency check passed for level 190
+BTM Consistency check passed for level 191
+BTM Consistency check passed for level 192
+BTM Consistency check passed for level 193
+BTM Consistency check passed for level 194
+BTM Consistency check passed for level 195
+BTM Consistency check passed for level 196
+BTM Consistency check passed for level 197
+BTM Consistency check passed for level 198
+BTM Consistency check passed for level 199
+BTM Consistency check passed for level 200
+BTM Consistency check passed for level 201
+BTM Consistency check passed for level 202
+BTM Consistency check passed for level 203
+BTM Consistency check passed for level 204
+BTM Consistency check passed for level 205
+BTM Consistency check passed for level 206
+BTM Consistency check passed for level 207
+BTM Consistency check passed for level 208
+BTM Consistency check passed for level 209
+BTM Consistency check passed for level 210
+BTM Consistency check passed for level 211
+BTM Consistency check passed for level 212
+BTM Consistency check passed for level 213
+BTM Consistency check passed for level 214
+BTM Consistency check passed for level 215
+BTM Consistency check passed for level 216
+BTM Consistency check passed for level 217
+BTM Consistency check passed for level 218
+BTM Consistency check passed for level 219
+BTM Consistency check passed for level 220
+BTM Consistency check passed for level 221
+BTM Consistency check passed for level 222
+BTM Consistency check passed for level 223
+BTM Consistency check passed for level 224
+BTM Consistency check passed for level 225
+BTM Consistency check passed for level 226
+BTM Consistency check passed for level 227
+BTM Consistency check passed for level 228
+BTM Consistency check passed for level 229
+BTM Consistency check passed for level 230
+BTM Consistency check passed for level 231
+BTM Consistency check passed for level 232
+BTM Consistency check passed for level 233
+BTM Consistency check passed for level 234
+BTM Consistency check passed for level 235
+BTM Consistency check passed for level 236
+BTM Consistency check passed for level 237
+BTM Consistency check passed for level 238
+BTM Consistency check passed for level 239
+BTM Consistency check passed for level 240
+BTM Consistency check passed for level 241
+BTM Consistency check passed for level 242
+BTM Consistency check passed for level 243
+BTM Consistency check passed for level 244
+BTM Consistency check passed for level 245
+BTM Consistency check passed for level 246
+BTM Consistency check passed for level 247
+BTM Consistency check passed for level 248
+BTM Consistency check passed for level 249
+BTM Consistency check passed for level 250
+BTM Consistency check passed for level 251
+BTM Consistency check passed for level 252
+BTM Consistency check passed for level 253
+BTM Consistency check passed for level 254
+BTM Consistency check passed for level 255
+BTM Consistency check passed for level 256
+BTM Consistency check passed for level 257
+BTM Consistency check passed for level 258
+BTM Consistency check passed for level 259
+BTM Consistency check passed for level 260
+BTM Consistency check passed for level 261
+BTM Consistency check passed for level 262
+BTM Consistency check passed for level 263
+BTM Consistency check passed for level 264
+BTM Consistency check passed for level 265
+BTM Consistency check passed for level 266
+BTM Consistency check passed for level 267
+BTM Consistency check passed for level 268
+BTM Consistency check passed for level 269
+BTM Consistency check passed for level 270
+BTM Consistency check passed for level 271
+BTM Consistency check passed for level 272
+BTM Consistency check passed for level 273
+BTM Consistency check passed for level 274
+BTM Consistency check passed for level 275
+BTM Consistency check passed for level 276
+BTM Consistency check passed for level 277
+BTM Consistency check passed for level 278
+BTM Consistency check passed for level 279
+BTM Consistency check passed for level 280
+BTM Consistency check passed for level 281
+BTM Consistency check passed for level 282
+BTM Consistency check passed for level 283
+BTM Consistency check passed for level 284
+BTM Consistency check passed for draws
+Finished consistency checks in 21129.4s.
+store_egtb: corrupt value 1111 at 24
