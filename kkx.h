@@ -8,13 +8,28 @@
 #include "bitboard.h"
 #include "uci.h"
 
+//  { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9} -> { 0, 1, 2, 3, 9, 10, 11, 18, 19, 27}
+const int8_t IX_TO_KKX_KNTM_SQ[10] = { 0, 1, 2, 3, 9, 10, 11, 18, 19, 27};
+inline int8_t ix_to_kkx_kntm_sq(int ix) {
+    return IX_TO_KKX_KNTM_SQ[ix];
+}
 
-const int8_t IX_TO_KNTM_SQ[10] = { 0, 1, 2, 3, 9, 10, 11, 18, 19, 27};
-
-inline int8_t kntm_sq_to_ix(Square kntm_sq) {
+// { 0, 1, 2, 3, 9, 10, 11, 18, 19, 27} -> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+inline int8_t kkx_kntm_sq_to_ix(Square kntm_sq) {
     int8_t x = kntm_sq;
     return x - (((9 + (x>>3)) * (x >> 3)) >> 1);
 }
+
+// {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ..., 32} -> { 0, 1, 2, 3, 4, 8, 9, 10, 11, 16, 17, ..., 59}
+inline int ix_to_kkp_kntm_sq(int ix) {
+    return ix + (ix >> 2) * 4; // put king on left side of board
+}
+// { 0, 1, 2, 3, 4, 8, 9, 10, 11, 16, 17, ..., 59} -> {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ..., 31}
+inline int kkp_kntm_sq_to_ix(Square kntm_sq) {
+    int8_t x = kntm_sq;
+    return x - (x >> 3) * 4;
+}
+
 
 int16_t KKX_IX_TABLE[64][64];
 

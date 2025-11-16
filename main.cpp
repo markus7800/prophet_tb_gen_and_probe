@@ -20,8 +20,8 @@
 void test_index() {
 
     // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
-    int wpieces[6] = {0, 0, 0, 0, 2, 0};
-    int bpieces[6] = {0, 0, 1, 0, 0, 0};
+    int wpieces[6] = {0, 1, 0, 0, 0, 0};
+    int bpieces[6] = {0, 0, 0, 0, 0, 0};
 
     EGTB wtm_table = EGTB(wpieces, bpieces);
     std::cout << wtm_table.id << ": nonep: " << wtm_table.num_nonep_pos << ", ep: " << wtm_table.num_ep_pos << std::endl;
@@ -278,27 +278,10 @@ int main(int argc, char *argv[]) {
     exit(0);
 
 
-    // Bitboard unblockable_checks = unblockablechecks_bb(SQ_D2, B_PAWN);
+    // Bitboard unblockable_checks = unblockablechecks_bb(SQ_D3, PAWN);
     // std::cout << Bitboards::pretty(unblockable_checks) << std::endl;
     // exit(0);
 
-    uint64_t count = 0;
-    for (int ix = 0; ix < 10; ix++) {
-        Square kntm_sq = Square(IX_TO_KNTM_SQ[ix]);
-        std::cout << ix << ": " << square_to_uci(kntm_sq) << " " << int(kntm_sq_to_ix(kntm_sq)) << std::endl;
-        if (square_bb(kntm_sq) & DiagBB) {
-            // count += popcount((DiagBB | BelowDiagBB) & (~unblockablechecks_bb(kntm_sq, KING)) & ~square_bb(kntm_sq));
-            int val1 =  36 - 6 + 3 * (kntm_sq == SQ_A1);
-            int val2 = popcount((DiagBB | BelowDiagBB) & (~unblockablechecks_bb(kntm_sq, KING)) & ~square_bb(kntm_sq));
-            assert (val1 == val2);
-            count += val1;
-        } else {
-            count += 64 - num_unblockablechecks(kntm_sq, KING) - 1;
-        }
-    }
-    std::cout << "count: " << count << std::endl;
-
-    exit(0);
 
     EGPosition pos;
 

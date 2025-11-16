@@ -254,13 +254,14 @@ inline Bitboard attacks_bb(Square s, Color c = COLOR_NB) {
 }
 
 inline Bitboard unblockablechecks_bb(Square s, PieceType pt) {
-    assert (pt != PAWN); // TODO: pawn always move up
+    assert (pt != NO_PIECE_TYPE);
+    // PAWN always moves up
     return UnblockableChecks[pt][s];
 }
 
 inline int num_unblockablechecks(Square s, PieceType pt) {
-    assert (pt != PAWN); // TODO: pawn always move up
-    return UnblockableChecksCount[pt][s];
+    assert (pt != NO_PIECE_TYPE);
+    return UnblockableChecksCount[pt][s];    
 }
 
 

@@ -119,10 +119,8 @@ void Bitboards::init() {
             }
             UnblockableChecksCount[pt][sq] = popcount(UnblockableChecks[pt][sq]);
         }
-        for (Color c: {WHITE, BLACK}) {
-            UnblockableChecks[c][sq] = PseudoAttacks[~c][sq] & PseudoAttacks[KING][sq] & ~(Rank1BB | Rank8BB); // have to flip pawn attacks
-            UnblockableChecksCount[c][sq] = popcount(UnblockableChecks[c][sq]);
-        }
+        UnblockableChecks[PAWN][sq] = PseudoAttacks[BLACK][sq] & ~(Rank1BB | Rank8BB); // only pawns that move north
+        UnblockableChecksCount[PAWN][sq] = popcount(UnblockableChecks[PAWN][sq]);
     }
 }
 
