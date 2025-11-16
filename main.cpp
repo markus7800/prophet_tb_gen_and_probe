@@ -20,7 +20,7 @@
 void test_index() {
 
     // 0, PAWN, KNIGHT, BISHOP, ROOK, QUEEN 
-    int wpieces[6] = {0, 0, 0, 0, 1, 0};
+    int wpieces[6] = {0, 0, 0, 0, 2, 0};
     int bpieces[6] = {0, 0, 1, 0, 0, 0};
 
     EGTB wtm_table = EGTB(wpieces, bpieces);
@@ -60,20 +60,16 @@ void test_index() {
         for (Square k1_sq = SQ_A1; k1_sq <= SQ_H8; ++k1_sq) {
             for (Square k2_sq = SQ_A1; k2_sq <= SQ_H8; ++k2_sq) {
                 if (k2_sq == k1_sq) { continue; }
-                for (Square p1_sq = SQ_A1; p1_sq <= SQ_NONE; ++p1_sq) {
-                    if ((pts[0] == NO_PIECE_TYPE) != (p1_sq == SQ_NONE)) { continue; }
+                for (Square p1_sq = (pts[0] != NO_PIECE_TYPE) ? SQ_A1 : SQ_NONE; p1_sq <= ((pts[0] != NO_PIECE_TYPE) ? SQ_H8 : SQ_NONE); ++p1_sq) {
                     if (pts[0] == PAWN && !(p1_sq & PawnSquaresBB)) { continue; }
                     if (p1_sq != SQ_NONE && (p1_sq == k1_sq || p1_sq == k2_sq)) { continue; }
-                    for (Square p2_sq = SQ_A1; p2_sq <= SQ_NONE; ++p2_sq) {
-                        if ((pts[1] == NO_PIECE_TYPE) != (p2_sq == SQ_NONE)) { continue; }
+                    for (Square p2_sq = (pts[1] != NO_PIECE_TYPE) ? SQ_A1 : SQ_NONE; p2_sq <= ((pts[1] != NO_PIECE_TYPE) ? SQ_H8 : SQ_NONE); ++p2_sq) {
                         if (pts[1] == PAWN && !(p2_sq & PawnSquaresBB)) { continue; }
                         if (p2_sq != SQ_NONE && (p2_sq == k1_sq || p2_sq == k2_sq || p2_sq == p1_sq)) { continue; }
-                        for (Square p3_sq = SQ_A1; p3_sq <= SQ_NONE; ++p3_sq) {
-                            if ((pts[2] == NO_PIECE_TYPE) != (p3_sq == SQ_NONE)) { continue; }
+                        for (Square p3_sq = (pts[2] != NO_PIECE_TYPE) ? SQ_A1 : SQ_NONE; p3_sq <= ((pts[2] != NO_PIECE_TYPE) ? SQ_H8 : SQ_NONE); ++p3_sq) {
                             if (pts[2] == PAWN && !(p3_sq & PawnSquaresBB)) { continue; }
                             if (p3_sq != SQ_NONE && (p3_sq == k1_sq || p3_sq == k2_sq || p3_sq == p1_sq || p3_sq == p2_sq)) { continue; }
-                            for (Square p4_sq = SQ_A1; p4_sq <= SQ_NONE; ++p4_sq) {
-                                if ((pts[3] == NO_PIECE_TYPE) != (p4_sq == SQ_NONE)) { continue; }
+                            for (Square p4_sq = (pts[3] != NO_PIECE_TYPE) ? SQ_A1 : SQ_NONE; p4_sq <= ((pts[3] != NO_PIECE_TYPE) ? SQ_H8 : SQ_NONE); ++p4_sq) {
                                 if (pts[3] == PAWN && !(p4_sq & PawnSquaresBB)) { continue; }
                                 if (p4_sq != SQ_NONE && (p4_sq == k1_sq || p4_sq == k2_sq || p4_sq == p1_sq || p4_sq == p2_sq || p4_sq == p3_sq)) { continue; }
 
@@ -84,10 +80,10 @@ void test_index() {
                                     pos4.reset();
                                     pos1.put_piece(make_piece(~stm, KING), k1_sq);
                                     pos1.put_piece(make_piece(stm,KING), k2_sq);
-                                    if (pts[0] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[0],pts[0]), p1_sq);
-                                    if (pts[1] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[1],pts[1]), p2_sq);
-                                    if (pts[2] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[2],pts[2]), p3_sq);
-                                    if (pts[3] != NO_PIECE_TYPE) pos1.put_piece(make_piece(cs[3],pts[3]), p4_sq);
+                                    if (p1_sq != SQ_NONE) pos1.put_piece(make_piece(cs[0],pts[0]), p1_sq);
+                                    if (p2_sq != SQ_NONE) pos1.put_piece(make_piece(cs[1],pts[1]), p2_sq);
+                                    if (p3_sq != SQ_NONE) pos1.put_piece(make_piece(cs[2],pts[2]), p3_sq);
+                                    if (p4_sq != SQ_NONE) pos1.put_piece(make_piece(cs[3],pts[3]), p4_sq);
                                     pos1.set_side_to_move(stm);
                                     if (pos1.sntm_in_check()) { continue; }
 
