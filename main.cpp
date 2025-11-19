@@ -389,6 +389,7 @@ int main(int argc, char *argv[]) {
     std::string longest_overall_mate_str;
     bool check_longest_mate = false;
     bool generate_missing = true;
+    bool generate_only_one = true;
 
     std::unordered_set<std::string> egtbs = {};
     
@@ -429,10 +430,11 @@ int main(int argc, char *argv[]) {
                             if (p.second) { // true if inserted
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
-                                if (generate_missing) {
+                                if (generate_missing && !egtb_exists(&egtb, folder)) {
                                     g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true, false);
                                     g->gen(nthreads);
                                     g->~GenEGTB();
+                                    if (generate_only_one) return 0;
                                 }
 
                                 /*check_longest_mate = (
