@@ -29,7 +29,7 @@ void test_index() {
     // exit(0);
 
     uint64_t count = 0;
-    for (Color stm: {WHITE, BLACK}) {
+    for (Color stm: {~WHITE, ~BLACK}) {
 
         EGTB egtb = stm == WHITE ? wtm_table : btm_table;
 
@@ -129,8 +129,9 @@ void test_index() {
                 }
             }
         }
+        std::cout << "Checked " << count << " kkx positions" << std::endl;
+        count = 0;
     }
-    std::cout << "Checked " << count << " kkx positions" << std::endl;
     
 }
 
