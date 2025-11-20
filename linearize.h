@@ -196,7 +196,7 @@ int insert_count_lt_squares(Square occupied_sqs[6], int& n_occupied_sqs, Square 
 void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6], const int bpieces[6], const uint64_t kntm_poscounts[N_KKP]) {
     bool no_pawns = (wpieces[PAWN] + bpieces[PAWN] == 0);
     pos.set_side_to_move(stm);
-    int8_t flip = !no_pawns && (stm == BLACK) ? 56 : 0;
+    int8_t bptm_flip = !no_pawns && (stm == BLACK) ? 56 : 0; // black pawn to move flip
 
     uint64_t s = 0;
     Bitboard available_squares = 0;
@@ -224,10 +224,11 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
     Square ktm_sq = no_pawns ? Square(KKX_KTM_SQ[kix]) : Square(KKP_KTM_SQ[kix]);
     // std::cout << "pos_at_ix: " << "kix: " << kix << " kntm_sq: " << square_to_uci(kntm_sq) << " ktm_sq: " << square_to_uci(ktm_sq) << std::endl;
 
-    pos.put_piece(make_piece(stm, KING), ktm_sq ^ flip);
-    pos.put_piece(make_piece(~stm, KING), kntm_sq ^ flip);
+    pos.put_piece(make_piece(stm, KING), ktm_sq ^ bptm_flip);
+    pos.put_piece(make_piece(~stm, KING), kntm_sq ^ bptm_flip);
 
     int n_occupied_sqs = 2;
+    Bitboard occupied_sqs = square_bb(ktm_sq) | square_bb(kntm_sq); // not bptm_flipped
 
     int sqs_ixs[4];
 
@@ -253,10 +254,10 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
             }
         } else {
             if (pt == PAWN) {
-                available_squares = ~pos.pieces() & PawnSquaresBB; // stm pawns always occupy, kings may occupy PawnSquaresBB
+                available_squares = ~occupied_sqs & PawnSquaresBB; // stm pawns always occupy, kings may occupy PawnSquaresBB
                 n_available_squares = 48 - n_occupied_sqs + 2 - bool(square_bb(kntm_sq) & PawnSquaresBB) - bool(square_bb(ktm_sq) & PawnSquaresBB);
             } else {
-                available_squares = ~pos.pieces();
+                available_squares = ~occupied_sqs;
                 n_available_squares = 64 - n_occupied_sqs;
             }
         }
@@ -266,14 +267,15 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
         ix = ix / s;
         tril_from_linear(piece_count, tril_ix, sqs_ixs);
 
-        std::cout << "pos_at_ix: " << PieceToChar[pc] << ": n_available_squares: " << n_available_squares << " tril_ix: " << tril_ix;
+        // std::cout << "pos_at_ix: " << PieceToChar[pc] << ": n_available_squares: " << n_available_squares << " tril_ix: " << tril_ix;
         for (int j = 0; j < piece_count; j++) {
             Square sq = nth_set_sq(available_squares, sqs_ixs[j]);
-            std::cout << " " << sqs_ixs[j] << "->" << square_to_uci(sq ^ flip);
-            pos.put_piece(pc, sq ^ flip);
+            // std::cout << " " << sqs_ixs[j] << "->" << square_to_uci(sq ^ bptm_flip);
+            pos.put_piece(pc, sq ^ bptm_flip);
+            occupied_sqs |= square_bb(sq);
             n_occupied_sqs++;
         }
-        std::cout << std::endl;
+        // std::cout << std::endl;
     }
     
     if (n_occupied_sqs > 6) { std::cout << "More than 6 pieces not supported! (have " << n_occupied_sqs << ")\n"; assert(false); }
@@ -518,7 +520,7 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos, const uint64_t kntm_poscounts[N_
                 }
             }
 
-            std::cout << "ix_from_pos: " << PieceToChar[make_piece(c,pt)] << ": n_available_squares: " << n_available_squares;
+            // std::cout << "ix_from_pos: " << PieceToChar[make_piece(c,pt)] << ": n_available_squares: " << n_available_squares;
             int piece_count = 0;
             int offset = (pt == PAWN) ? 8 : 0;
             while (transformedBB) {
@@ -527,14 +529,14 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos, const uint64_t kntm_poscounts[N_
                 occupied_sqs |= square_bb(sq);
                 n_occupied_sqs++;
                 sqs_ixs[piece_count] = (int) sq - k - offset;
-                std::cout << " " << square_to_uci(sq) << "->" << sqs_ixs[piece_count] << "(k:" << k << ")";
+                // std::cout << " " << square_to_uci(sq) << "->" << sqs_ixs[piece_count] << "(k:" << k << ")";
                 piece_count++;
             }
 
             uint64_t tril_ix = tril_to_linear(piece_count, sqs_ixs);
             ix += tril_ix * multiplier;
             multiplier *= number_of_ordered_tuples(n_available_squares, piece_count);
-            std::cout << " tril_ix: " << tril_ix << std::endl;
+            // std::cout << " tril_ix: " << tril_ix << std::endl;
         }
     }
 
