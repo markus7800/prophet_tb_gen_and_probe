@@ -73,6 +73,7 @@ struct EGTB {
     }
 
     void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) {
+        assert (ix < this->num_pos);
         if (stm == WHITE) {
             pos_at_ix_(pos, ix, stm, this->stm_pieces, this->sntm_pieces, this->kntm_poscounts);
         } else {
@@ -81,7 +82,14 @@ struct EGTB {
     }
 
     uint64_t ix_from_pos(EGPosition const &pos) {
-        return ix_from_pos_(pos, this->kntm_poscounts);
+        uint64_t ix = ix_from_pos_(pos, this->kntm_poscounts);
+        if (ix >= this->num_pos) {
+            std::cout << pos << pos.fen();
+            std::cout << "ix " << ix << " vs " << this->num_pos << std::endl;
+            assert (false);
+        }
+        assert (ix < this->num_pos);
+        return ix;
     }
 };
 
@@ -101,6 +109,9 @@ void store_egtb(EGTB* egtb, std::string folder) {
     outputFileStream.open(filename, std::ios::out|std::ios::binary);
     for(uint64_t i=0; i<egtb->num_pos; i++) {
         int16_t val = egtb->TB[i];
+        if (val == UNUSED) {
+            val = 0;
+        }
         if (!IS_SET(val)) {
             std::cout << "store_egtb: corrupt value " << int(val) << " at " << i << std::endl;
             exit(1);
@@ -462,6 +473,9 @@ void GenEGTB::gen(int nthreads) {
     }
     std::cout << "Generate " << WTM_EGTB->num_pos << " " << WTM_EGTB->id << " and " << BTM_EGTB->num_pos << " " << BTM_EGTB->id << std::endl;
 
+    int piece_count = 2;
+    for (int i = 0; i < 6; i++) piece_count += wpieces[i] + bpieces[i];
+
     allocate_and_load();
 
     int16_t LEVEL = 0;
@@ -487,27 +501,35 @@ void GenEGTB::gen(int nthreads) {
             LOSS_COLOR = BLACK;
             CAPTURE_EGTBs = WTM_EGTBs;
         }
-        uint64_t N_UNUSED = 0;
+
+        uint64_t N_PIECE_COLLISION = 0;
         uint64_t N_SNTM_IN_CHECK = 0;
         uint64_t N_ILLEGAL_EP = 0;
+        uint64_t N_SYMMETRY = 0;
         uint64_t N_CHECKMATE = 0;
 
-        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS) reduction(+:N_UNUSED) reduction(+:N_SNTM_IN_CHECK) reduction(+:N_ILLEGAL_EP) reduction(+:N_CHECKMATE) reduction(max:MIN_LEVEL)
+
+        #pragma omp parallel for num_threads(nthreads) schedule(static,64) reduction(+:N_LEVEL_POS) reduction(+:N_SYMMETRY) reduction(+:N_SNTM_IN_CHECK) reduction(+:N_ILLEGAL_EP) reduction(+:N_PIECE_COLLISION) reduction(+:N_CHECKMATE) reduction(max:MIN_LEVEL)
         for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
             EGPosition pos;
             pos.reset();
             LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
-            bool sntm_in_check = pos.sntm_in_check();
 
-            if (LOSS_EGTB->ix_from_pos(pos) != ix || sntm_in_check) {
+            if (popcount(pos.pieces()) != piece_count) {
+                N_PIECE_COLLISION++;
                 LOSS_EGTB->TB[ix] = UNUSED;
-                N_UNUSED++;
-                N_SNTM_IN_CHECK += sntm_in_check;
+                continue;
+            } else if (pos.sntm_in_check()) {
+                N_SNTM_IN_CHECK++;
+                LOSS_EGTB->TB[ix] = UNUSED;
                 continue;
             } else if ((ix > LOSS_EGTB->num_nonep_pos) && !pos.check_ep(pos.ep_square())) {
-                LOSS_EGTB->TB[ix] = UNUSED;
-                N_UNUSED++;
                 N_ILLEGAL_EP++;
+                LOSS_EGTB->TB[ix] = UNUSED;
+                continue;
+            } else if (LOSS_EGTB->ix_from_pos(pos) != ix) {
+                N_SYMMETRY++;
+                LOSS_EGTB->TB[ix] = UNUSED;
                 continue;
             } else {
                 LOSS_EGTB->TB[ix] = UNKNOWN;
@@ -520,7 +542,7 @@ void GenEGTB::gen(int nthreads) {
                     N_CHECKMATE++;
                     N_LEVEL_POS++;
                 } else {
-                    LOSS_EGTB->TB[ix] = 0;
+                    LOSS_EGTB->TB[ix] = 0; // stale mate
                 }
 
             } else {
@@ -572,13 +594,16 @@ void GenEGTB::gen(int nthreads) {
             }
         }
 
+        uint64_t N_UNUSED = N_SYMMETRY + N_ILLEGAL_EP + N_PIECE_COLLISION + N_SNTM_IN_CHECK;
         std::cout << "Stats for " << ((wtm) ? get_egtb_identifier(wpieces, bpieces) : get_egtb_identifier(bpieces, wpieces)) << ":\n";
         std::cout << "    # Non-EP positions: " << LOSS_EGTB->num_nonep_pos << " (" << (double) LOSS_EGTB->num_nonep_pos / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         std::cout << "    # EP positions: " << LOSS_EGTB->num_ep_pos << " (" << (double) LOSS_EGTB->num_ep_pos / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         std::cout << "    Checkmate count: " << N_CHECKMATE << " (" << (double) N_CHECKMATE / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         std::cout << "    " << N_UNUSED << " unused indices (" << (double) N_UNUSED / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
+        std::cout << "    " << N_PIECE_COLLISION << " of which piece collision (" << (double) N_PIECE_COLLISION / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         std::cout << "    " << N_SNTM_IN_CHECK << " of which sntm in check (" << (double) N_SNTM_IN_CHECK / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
-        if (LOSS_EGTB->num_ep_pos > 0) std::cout << "    " << N_ILLEGAL_EP << " EP positions illegal (" << (double) N_ILLEGAL_EP / LOSS_EGTB->num_ep_pos * 100 << "%)" << std::endl;;
+        if (LOSS_EGTB->num_ep_pos > 0) std::cout << "    " << N_ILLEGAL_EP << " of which illegal EP positions (" << (double) N_ILLEGAL_EP / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
+        std::cout << "    " << N_SYMMETRY << " of which symmetric positions (" << (double) N_SYMMETRY / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
     }
 
     TimePoint t1 = now();

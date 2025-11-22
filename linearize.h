@@ -70,14 +70,15 @@ void compute_poscounts(const int stm_pieces[6], const int sntm_pieces[6], uint64
 
         // pawns
         uint64_t n_squares_availables = 48 - 2; // sub two ep pawns
-        n *= number_of_ordered_tuples(n_squares_availables, sntm_pieces[PAWN]-1);
-
-        n_squares_availables = 48 - 1 - sntm_pieces[PAWN]; // sub stm ep pawn and sntm pawns
         n *= number_of_ordered_tuples(n_squares_availables, stm_pieces[PAWN]-1);
 
-        n_squares_availables = 64 - 2 - sntm_pieces[PAWN] - stm_pieces[PAWN]; // sub kings and pawns
+        n_squares_availables = 48 - 1 - stm_pieces[PAWN]; // sub sntm ep pawn and stm pawns
+        n *= number_of_ordered_tuples(n_squares_availables, sntm_pieces[PAWN]-1);
 
-        for (int stm = 0; stm <= 1; ++stm) {
+        // pieces
+        n_squares_availables = 64 - 2 - stm_pieces[PAWN] - sntm_pieces[PAWN]; // sub kings and pawns
+
+        for (int stm = 1; stm >= 0; --stm) {
             const int* pieces = (stm) ? stm_pieces : sntm_pieces;
             for (PieceType pt = QUEEN; pt >= KNIGHT; --pt) {
                 n *= number_of_ordered_tuples(n_squares_availables, pieces[pt]);
@@ -126,7 +127,7 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
     Bitboard available_squares = 0;
     uint64_t n_available_squares = 0;
 
-    bool EP = kntm_poscounts[N_KKP] <= ix; // kntm_poscounts[N_KKP] == number of non-ep positions
+    bool EP = !no_pawns && (kntm_poscounts[N_KKP] <= ix); // kntm_poscounts[N_KKP] == number of non-ep positions
     int kix;
 
     Bitboard occupied_sqs = 0; // not bptm_flipped
@@ -191,6 +192,13 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
     for (int i = 0; i < 10; i++) {
         Color c = cs[i];
         PieceType pt = pts[i];
+
+        if (EP && c == stm && pt == QUEEN) {
+            // finished with pawns, now we add kings to occupied squares
+            occupied_sqs |= (square_bb(ktm_sq) | square_bb(kntm_sq));
+            n_occupied_sqs += 2;
+        }
+
         const int* c_pieces = (c == WHITE) ? wpieces : bpieces;
         int piece_count = c_pieces[pt] - (EP && (pt == PAWN));  // if EP already placed one pawn for each side
         if (piece_count == 0) { continue; }
@@ -198,13 +206,8 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
 
         if (EP) {
             if (pt == PAWN) {
-                available_squares = ~occupied_sqs; // occupied_sqs only contains pawns (ep + potentially stm pawns) at this point
+                available_squares = ~(occupied_sqs | Rank1BB | Rank8BB); // occupied_sqs only contains pawns (ep + potentially stm pawns) at this point
                 n_available_squares = 48 - n_occupied_sqs;
-                if (c == ~stm){
-                    // finished with pawns, now we add kings to occupied squares
-                    occupied_sqs |= (square_bb(ktm_sq) | square_bb(kntm_sq));
-                    n_occupied_sqs += 2;
-                }
             } else {
                 available_squares = ~occupied_sqs;
                 n_available_squares = 64 - n_occupied_sqs;
@@ -212,7 +215,7 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
         } else if (c == stm) {
             Bitboard unblockable_checks = unblockablechecks_bb(kntm_sq,pt);
             if (pt == PAWN) {
-                available_squares = ~(unblockable_checks | square_bb(kntm_sq) | square_bb(ktm_sq) | Rank1BB | Rank8BB);
+                available_squares = ~(unblockable_checks | square_bb(kntm_sq) | square_bb(ktm_sq) | Rank1BB | Rank8BB); // adding Rank1BB and Rank8BB handles offset in nth_set_sq
                 n_available_squares = 48 - num_unblockablechecks(kntm_sq, PAWN) - bool(square_bb(kntm_sq) & PawnSquaresBB) - bool(square_bb(ktm_sq) & PawnSquaresBB);
             } else {
                 available_squares = ~(unblockable_checks | square_bb(kntm_sq) | square_bb(ktm_sq));
@@ -231,10 +234,11 @@ void pos_at_ix_kkx(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6]
         s = number_of_ordered_tuples(n_available_squares, piece_count);
         uint64_t tril_ix = ix % s;
         ix = ix / s;
+        
+        // std::cout << "pos_at_ix: " << PieceToChar[pc] << ": n_available_squares: " << n_available_squares << " tril_ix: " << tril_ix << " piece_count: " << piece_count << std::endl;
     
         tril_from_linear(piece_count, tril_ix, sqs_ixs);
 
-        // std::cout << "pos_at_ix: " << PieceToChar[pc] << ": n_available_squares: " << n_available_squares << " tril_ix: " << tril_ix << " piece_count:" << piece_count << std::endl;
         for (int j = 0; j < piece_count; j++) {
             Square sq = nth_set_sq(available_squares, sqs_ixs[j]);
             // std::cout << " " << sqs_ixs[j] << "->" << square_to_uci(sq ^ bptm_flip);
@@ -510,6 +514,12 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos, const uint64_t kntm_poscounts[])
         Color c = cs[i];
         PieceType pt = pts[i];
 
+        if (EP && c == stm && pt == QUEEN) {
+            // finished with pawns, now we add kings to occupied squares
+            occupied_sqs |= (square_bb(kntm_sq) | square_bb(ktm_sq));
+            n_occupied_sqs += 2;
+        }
+
         Bitboard pieceBB = pos.pieces(c, pt);
         if (pieceBB) {
             Bitboard transformedBB = maybe_update_swap_and_transform_bb(pieceBB, flip, is_diag_symmetric, swap);
@@ -519,7 +529,7 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos, const uint64_t kntm_poscounts[])
                     // already accounted for ep pawns
                     transformedBB = transformedBB & ~(square_bb(ep_pawn_sq) | square_bb(ep_cap_pawn_sq));
 
-                    unavailable_squares = ~occupied_sqs; // occupied_sqs only contains pawns (ep + potentially stm pawns) at this point
+                    unavailable_squares = occupied_sqs & PawnSquaresBB; // occupied_sqs only contains pawns (ep + potentially stm pawns) at this point
                     n_available_squares = 48 - n_occupied_sqs;
                 } else {
                     unavailable_squares = occupied_sqs;
@@ -561,7 +571,7 @@ uint64_t ix_from_pos_kkx(EGPosition const &pos, const uint64_t kntm_poscounts[])
             uint64_t tril_ix = tril_to_linear(piece_count, sqs_ixs);
             ix += tril_ix * multiplier;
             multiplier *= number_of_ordered_tuples(n_available_squares, piece_count);
-            // std::cout << " tril_ix: " << tril_ix << std::endl;
+            // std::cout << " tril_ix: " << tril_ix << " piece_count: " << piece_count << std::endl;
         }
     }
 

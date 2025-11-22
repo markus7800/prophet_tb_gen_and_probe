@@ -56,9 +56,9 @@ void count_broken(EGTB* egtb) {
 void test_index() {
 
     //                0, P, N, B, R, Q
-    int wpieces[6] = {0, 1, 0, 0, 0, 1};
+    int wpieces[6] = {0, 2, 0, 0, 0, 0};
     int bpieces[6] = {0, 1, 0, 0, 0, 0};
-    bool check_ep = true;
+    bool check_ep = false;
 
     if (check_ep) assert(wpieces[PAWN] > 0 && bpieces[PAWN] > 0);
 
@@ -212,58 +212,14 @@ int main(int argc, char *argv[]) {
     // test_pawn_tril_3();
     // test_pawn_tril_4();
     // exit(0);
-    test_index();
-    // test_ep_index();
 
-    
-    exit(0);
+    // test_index();
+    // exit(0);
 
     
 
     EGPosition pos;
 
-
-    /*
-    pos.reset();
-    pos.put_piece(W_KING, SQ_A1);
-    pos.put_piece(B_KING, SQ_H1);
-    pos.put_piece(W_PAWN, SQ_A2);
-    pos.put_piece(W_PAWN, SQ_E2);
-    pos.put_piece(W_PAWN, SQ_H2);
-    pos.put_piece(B_PAWN, SQ_B4);
-    pos.put_piece(B_PAWN, SQ_D4);
-    pos.put_piece(B_PAWN, SQ_F4);
-
-    // pos.do_move(Move(SQ_A2, SQ_A4)); // one pe
-    pos.do_move(Move(SQ_E2, SQ_E4)); // two ep
-    // pos.do_move(Move(SQ_H2, SQ_H4)); // no ep
-
-    std::cout << pos;
-    std::cout << "Forward moves:\n";
-    for (Move m: EGMoveList<FORWARD>(pos)) {
-        std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
-    }*/
-
-
-    /*
-    pos.reset();
-    pos.put_piece(W_KING, SQ_A1);
-    pos.put_piece(B_KING, SQ_H1);
-    pos.put_piece(W_PAWN, SQ_A4);
-    pos.put_piece(W_PAWN, SQ_E4);
-    pos.put_piece(W_PAWN, SQ_H4);
-    pos.put_piece(B_PAWN, SQ_B4);
-    pos.put_piece(B_PAWN, SQ_D4);
-    pos.put_piece(B_PAWN, SQ_F4);
-    pos.set_side_to_move(BLACK);
-
-    std::cout << pos;
-    std::cout << "Reverse moves:\n";
-    for (Move m: EGMoveList<REVERSE>(pos)) {
-        std::cout << move_to_uci(m) << " " << int(m.type_of()>>14) << std::endl;
-    }*/
-
-    //exit(0);
 
     assert (argc > 0);
     int nthreads = atoi(argv[1]);
@@ -271,63 +227,27 @@ int main(int argc, char *argv[]) {
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
 
-    // pieces1 = {0, 2, 0, 0, 0, 0};
-    // pieces2 = {0, 0, 0, 0, 0, 0};
-    // EGTB _egtb = EGTB(&pieces1[0], &pieces2[0]);
-    // pos.reset();
-    // pos_at_ix(pos, 2313337, BLACK, &pieces1[0], &pieces2[0], _egtb.num_nonep_pos, _egtb.num_ep_pos);
-    // std::cout << pos << std::endl;
-    // uint64_t ix = ix_from_pos(pos, _egtb.num_nonep_pos, _egtb.num_ep_pos);
-    // std::cout << ix << std::endl;
-    // for (Move move : EGMoveList<REVERSE>(pos)) {
-    //     std::cout << move_to_uci(move) << std::endl;
-    // }
-    // exit(0);
 
-    
-    /*
-    pieces1 = {0, 2, 0, 0, 0, 0};
-    pieces2 = {0, 0, 0, 0, 0, 0};
-
-    uint64_t LOSS_NPOS = compute_num_positions(&pieces1[0], &pieces2[0]);
-    uint64_t N_UNUSED = 0;
-    uint64_t N_SNTM_IN_CHECK = 0;
-
-    for (uint64_t ix = 0; ix < LOSS_NPOS; ix++) {
-        pos.reset();
-        pos_at_ix(pos, ix, WHITE, &pieces1[0], &pieces2[0]);
-        if (ix_from_pos(pos) != ix && !pos.sntm_in_check()) {
-            N_UNUSED++;
-            // EGPosition pos2;
-            // pos2.reset();
-            // pos_at_ix(pos2, ix_from_pos(pos), BLACK, &pieces1[0], &pieces2[0]);
-            // std::cout << pos << ix << " unused" << std::endl;
-            // std::cout << pos2 << ix_from_pos(pos) << "\n\n";
-        }
-        if (pos.sntm_in_check()) {
-            // std::cout << pos << ix << " sntm_in_check" << std::endl;
-            N_UNUSED++;
-            N_SNTM_IN_CHECK++;
-        }
-        // if (N_UNUSED > 100) { break; }
-        // if (N_SNTM_IN_CHECK > 100) { break; }
-    }
-    std::cout << N_UNUSED << std::endl;
-    std::cout << N_SNTM_IN_CHECK << std::endl;
-
-    exit(0);
-    */
+    // pieces1 = {0, 1, 1, 0, 0, 0};
+    // pieces2 = {0, 1, 0, 0, 0, 0};
+    // EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
+    // pos.put_piece(W_KING, SQ_B6);
+    // pos.put_piece(B_KING, SQ_A8);
+    // pos.put_piece(W_PAWN, SQ_D5);
+    // pos.put_piece(B_PAWN, SQ_C5);
+    // pos.put_piece(W_KNIGHT, SQ_G8);
+    // pos.set_ep_square(SQ_C6);
+    // uint64_t ix = egtb.ix_from_pos(pos);
+    // exit(1);
     
     pieces1 = {0, 0, 0, 0, 0, 0};
     pieces2 = {0, 0, 0, 0, 0, 0};
 
     GenEGTB* g;
+    std::string folder = "egtbs_new/";
 
     // pieces1 = {0, 1, 1, 0, 0, 0};
     // pieces2 = {0, 0, 0, 1, 1, 0};
-
-    std::string folder = "egtbs/";
-
     // g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
     // g->gen(nthreads);
     // g->~GenEGTB();
@@ -335,22 +255,23 @@ int main(int argc, char *argv[]) {
     
     Piece PIECES_ARR[] = {NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN};
 
-    // EGPosition pos;
+
     int16_t longest_overall_mate = WIN_IN(0) + 1;
     std::string longest_overall_mate_str;
     bool check_longest_mate = false;
     bool generate_missing = true;
+    bool zip = false;
 
     std::unordered_set<std::string> egtbs = {};
     
     uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
-    int MIN_PIECE_COUNT = 4;
-    int MAX_PIECE_COUNT = 4;
+    int MIN_PIECE_COUNT = 0;
+    int MAX_PIECE_COUNT = 3;
 
-    int MIN_PAWN_COUNT = 1;
-    int MAX_PAWN_COUNT = 1;
+    int MIN_PAWN_COUNT = 0;
+    int MAX_PAWN_COUNT = 3;
 
 
     for (int piece_count = MIN_PIECE_COUNT; piece_count <= MAX_PIECE_COUNT; piece_count++) {
@@ -381,20 +302,10 @@ int main(int argc, char *argv[]) {
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
                                 if (generate_missing) {
-                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
+                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip);
                                     g->gen(nthreads);
                                     g->~GenEGTB();
                                 }
-
-                                /*check_longest_mate = (
-                                    (id == "KNKRBN") ||
-                                    (id == "KBKQRB") ||
-                                    (id == "KBKQQB") ||
-                                    (id == "KBKQQQ") ||
-                                    (id == "KRKRBN") ||
-                                    (id == "KRKQQB") ||
-                                    (id == "KKQRRR")
-                                );*/
 
                                 if (egtb_exists(&egtb, folder) && check_longest_mate) {
                                     std::cout << id << ": ";
@@ -408,11 +319,6 @@ int main(int argc, char *argv[]) {
                                     for (uint64_t win_ix = 0; win_ix < egtb.num_pos; win_ix++) {
                                         int16_t val = egtb.TB[win_ix];
                                         if (!(IS_SET(val))) { std::cout << "CORRUPT: " << win_ix << ": " << val << std::endl; corrupt = true; };
-                                        if (
-                                            false
-                                        ) {
-                                            std::cout << "PREV CORRUPT: " << win_ix << ": " << val << std::endl; corrupt = true;
-                                        };
                                         if (val == 0) {
                                             val_count[0]++;
                                         } else {
@@ -443,10 +349,6 @@ int main(int argc, char *argv[]) {
                                     }
 
 
-                                    // if (!egtb_exists(&egtb, "egtbs8/")) {
-                                    //     store_egtb_8bit(&egtb, "egtbs8/");
-                                    // }
-
                                     free_egtb(&egtb);
 
                                     if (egtb_exists_zipped(&egtb, folder))
@@ -466,7 +368,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::cout << "Longest mate: " << longest_overall_mate_str << std::endl;
+    if (check_longest_mate) std::cout << "Longest mate: " << longest_overall_mate_str << std::endl;
 
     // for (int i = 0; i < 512; i++) {
     //     printf("%3d: %10lu,\n", i, val_count[i]);
