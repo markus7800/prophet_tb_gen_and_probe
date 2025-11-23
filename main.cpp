@@ -303,20 +303,11 @@ int main(int argc, char *argv[]) {
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
                                 if (generate_missing) {
-                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
+                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip, true);
                                     g->gen(nthreads);
                                     g->~GenEGTB();
+                                    if (generate_only_one) return 0;
                                 }
-
-                                /*check_longest_mate = (
-                                    (id == "KNKRBN") ||
-                                    (id == "KBKQRB") ||
-                                    (id == "KBKQQB") ||
-                                    (id == "KBKQQQ") ||
-                                    (id == "KRKRBN") ||
-                                    (id == "KRKQQB") ||
-                                    (id == "KKQRRR")
-                                );*/
 
                                 if (check_longest_mate && egtb_exists(&egtb, folder)) {
                                     std::cout << id << ": ";

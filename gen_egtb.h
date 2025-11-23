@@ -902,9 +902,9 @@ void GenEGTB::gen(int nthreads) {
     }
     std::cout << "BTM Consistency check passed for draws" << std::endl;
 
-        TimePoint t3 = now();
-        std::cout << "Finished consistency checks in " << (double) (t3 - t2)/ 1000.0 << "s." << std::endl;
-    }
+    TimePoint t3 = now();
+    std::cout << "Finished consistency checks in " << (double) (t3 - t2)/ 1000.0 << "s." << std::endl;
+    
 
     for (int wtm = 0; wtm <= 1; ++wtm) {
         EGTB* egtb = wtm ? WTM_EGTB : BTM_EGTB;
