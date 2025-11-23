@@ -260,6 +260,7 @@ int main(int argc, char *argv[]) {
     std::string longest_overall_mate_str;
     bool check_longest_mate = false;
     bool generate_missing = true;
+    bool generate_only_one = true;
     bool zip = false;
 
     std::unordered_set<std::string> egtbs = {};
@@ -302,12 +303,22 @@ int main(int argc, char *argv[]) {
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
                                 if (generate_missing) {
-                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip);
+                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
                                     g->gen(nthreads);
                                     g->~GenEGTB();
                                 }
 
-                                if (egtb_exists(&egtb, folder) && check_longest_mate) {
+                                /*check_longest_mate = (
+                                    (id == "KNKRBN") ||
+                                    (id == "KBKQRB") ||
+                                    (id == "KBKQQB") ||
+                                    (id == "KBKQQQ") ||
+                                    (id == "KRKRBN") ||
+                                    (id == "KRKQQB") ||
+                                    (id == "KKQRRR")
+                                );*/
+
+                                if (check_longest_mate && egtb_exists(&egtb, folder)) {
                                     std::cout << id << ": ";
                                     
                                     unzip_and_load_egtb(&egtb, folder, true);
