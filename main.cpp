@@ -207,16 +207,9 @@ int main(int argc, char *argv[]) {
     init_kkp_table();
     init_tril();
 
-    // test_pawn_tril_1();
-    // test_pawn_tril_2();
-    // test_pawn_tril_3();
-    // test_pawn_tril_4();
-    // exit(0);
-
     // test_index();
     // exit(0);
 
-    
 
     EGPosition pos;
 
@@ -260,7 +253,7 @@ int main(int argc, char *argv[]) {
     std::string longest_overall_mate_str;
     bool check_longest_mate = false;
     bool generate_missing = true;
-    bool generate_only_one = true;
+    bool generate_only_one = false;
     bool zip = false;
 
     std::unordered_set<std::string> egtbs = {};
@@ -269,7 +262,7 @@ int main(int argc, char *argv[]) {
     uint64_t total_poscount = 0;
 
     int MIN_PIECE_COUNT = 0;
-    int MAX_PIECE_COUNT = 3;
+    int MAX_PIECE_COUNT = 2;
 
     int MIN_PAWN_COUNT = 0;
     int MAX_PAWN_COUNT = 3;
@@ -305,7 +298,6 @@ int main(int argc, char *argv[]) {
                                 if (generate_missing) {
                                     g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip, true);
                                     g->gen(nthreads);
-                                    g->~GenEGTB();
                                     if (generate_only_one) return 0;
                                 }
 
