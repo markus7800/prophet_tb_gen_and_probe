@@ -19,15 +19,18 @@
 #include <sys/mman.h> // mmap
 #include <sys/stat.h> // file size
 
-inline int16_t WIN_IN(int16_t level) { return 1000 - level; }
-inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
-// inline int16_t MAYBELOSS_IN(int16_t level) { return -1001; }
-inline int16_t MAYBELOSS_IN(int16_t level) { return -11000 + level; }
-// a position is MAYBELOSS_IN(level) if there is a move to position that is WIN_IN(level-1) and all other moves are <=WIN_IN(level-1) (draw and loss is possible)
 #define UNUSED 1111
 #define UNKNOWN 1110
+inline int16_t WIN_IN(int16_t level) { return 1000 - level; }
+inline int16_t LOSS_IN(int16_t level) { return -1000 + level; }
+inline int16_t MAYBELOSS_IN(int16_t level) { return -11000 + level; }
+// a position is MAYBELOSS_IN(level) if there is a move to position that is WIN_IN(level-1) and all other moves are <=WIN_IN(level-1) (draw and loss is possible)
 inline int16_t IS_SET(int16_t val) { return LOSS_IN(0) <= val && val <= WIN_IN(0); }
-// inline int16_t IS_UNSET(int16_t val) { return val == 0; }
+
+#define LOWERBOUND_OFFSET 11000
+inline int16_t IS_LOWERBOUND(int16_t val) { return LOSS_IN(0) + LOWERBOUND_OFFSET <= val && val <= WIN_IN(0) + LOWERBOUND_OFFSET; };
+inline int16_t VAL_TO_LOWERBOUND(int16_t val) { return val + LOWERBOUND_OFFSET; };
+inline int16_t LOWERBOUND_TO_VAL(int16_t lb) { return lb - LOWERBOUND_OFFSET; };
 
 #define CHUNKSIZE 2048
 
@@ -66,7 +69,7 @@ struct EGTB {
     bool loaded;
 
     EGTB(int stm_pieces_[6], int sntm_pieces_[6]) {
-        npieces = 0;
+        npieces = 2;
         for (int i = 0; i < 6; i++) {
             stm_pieces[i] = stm_pieces_[i];
             sntm_pieces[i] = sntm_pieces_[i];
@@ -92,6 +95,21 @@ struct EGTB {
         assert (ix < this->num_pos);
         return ix;
     }
+
+    bool pos_ix_is_used(EGPosition const &pos, uint64_t ix) {
+        if (popcount(pos.pieces()) != npieces) {
+            return false;
+        } else if (pos.sntm_in_check()) {
+            return false;
+        } else if ((ix > num_nonep_pos) && !pos.check_ep(pos.ep_square())) {
+            return false;
+        } else if (ix_from_pos(pos) != ix) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
     std::string get_folder(std::string root_folder) {
         assert (!root_folder.empty() && root_folder.back() != '/');
         std::ostringstream os;
@@ -250,11 +268,12 @@ class GenEGTB {
     EGTB* BTM_EGTBs[6][6];
 
     bool allocated;
-    bool do_consistency_checks;
     bool zip;
+    bool do_consistency_checks;
+    bool disable_allocate_promotion_tb;
 
 public:
-    GenEGTB(int wpieces_[6], int bpieces_[6], std::string folder_, bool zip_, bool do_consistency_checks_) {
+    GenEGTB(int wpieces_[6], int bpieces_[6], std::string folder_, bool zip_, bool do_consistency_checks_, bool disable_allocate_promotion_tb_) {
         // std::cout << "GenEGTB\n";
         this->folder = folder_;
         this->n_pieces = 0;
@@ -277,9 +296,12 @@ public:
         this->allocated = false;
         this->do_consistency_checks = do_consistency_checks_;
         this->zip = zip_;
+        this->disable_allocate_promotion_tb = disable_allocate_promotion_tb_;
     }
     void allocate_and_load();
     void deallocate_and_free();
+
+    void retrograde_promotion_tbs(int nthreads);
 
     void gen(int nthreads);
     void check_consistency(EGPosition &pos, bool verbose);
@@ -321,7 +343,6 @@ void GenEGTB::allocate_and_load() {
         if (wpieces[capture_pt] > 0) {
             wpieces[capture_pt]--;
             EGTB* egtb = new EGTB(wpieces, bpieces); unzip_and_load_egtb(egtb, folder, false);
-            // madvise(egtb->TB, egtb->filesize, MADV_RANDOM);
             bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
             bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
             std::cout << "Loaded " << egtb->id << " for white " << PieceToChar[capture_pt] << " captured, white to move" << std::endl;
@@ -331,39 +352,10 @@ void GenEGTB::allocate_and_load() {
         if (bpieces[capture_pt] > 0) {
             bpieces[capture_pt]--;
             EGTB* egtb = new EGTB(bpieces, wpieces); unzip_and_load_egtb(egtb, folder, false);
-            // madvise(egtb->TB, egtb->filesize, MADV_RANDOM);
             bytes_allocated += egtb->num_pos * 2;
             std::cout << "Loaded " << egtb->id << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
             this->BTM_EGTBs[NO_PIECE_TYPE][capture_pt] = egtb;
             bpieces[capture_pt]++;
-        }
-    }
-
-    // promotions
-    for (PieceType promote_pt = KNIGHT; promote_pt <= QUEEN; ++promote_pt) {
-        if (bpieces[PAWN] > 0) {
-            bpieces[PAWN]--;
-            bpieces[promote_pt]++;
-            EGTB* egtb = new EGTB(wpieces, bpieces); unzip_and_load_egtb(egtb, folder, true);
-            // madvise(egtb->TB, egtb->filesize, MADV_RANDOM);
-            bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
-            bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
-            std::cout << "Loaded " << egtb->id << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
-            this->WTM_EGTBs[promote_pt][NO_PIECE_TYPE] = egtb;
-            bpieces[PAWN]++;
-            bpieces[promote_pt]--;
-        }
-        if (wpieces[PAWN] > 0) {
-            wpieces[PAWN]--;
-            wpieces[promote_pt]++;
-            EGTB* egtb = new EGTB(bpieces, wpieces); unzip_and_load_egtb(egtb, folder, true); 
-            // madvise(egtb->TB, egtb->filesize, MADV_RANDOM);
-            bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
-            bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
-            std::cout << "Loaded " << egtb->id << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
-            this->BTM_EGTBs[promote_pt][NO_PIECE_TYPE] = egtb;
-            wpieces[PAWN]++;
-            wpieces[promote_pt]--;
         }
     }
 
@@ -375,7 +367,6 @@ void GenEGTB::allocate_and_load() {
                 bpieces[PAWN]--;
                 bpieces[promote_pt]++;
                 EGTB* egtb = new EGTB(wpieces, bpieces); unzip_and_load_egtb(egtb, folder, false);
-                // madvise(egtb->TB, egtb->filesize, MADV_RANDOM);
                 bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
                 bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
                 std::cout << "Loaded " << egtb->id << " for white " << PieceToChar[capture_pt] << " captured with black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
@@ -389,7 +380,6 @@ void GenEGTB::allocate_and_load() {
                 wpieces[PAWN]--;
                 wpieces[promote_pt]++;
                 EGTB* egtb = new EGTB(bpieces, wpieces); unzip_and_load_egtb(egtb, folder, false); 
-                // madvise(egtb->TB, egtb->filesize, MADV_RANDOM);
                 bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
                 bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
                 std::cout << "Load " << egtb->id << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
@@ -400,6 +390,43 @@ void GenEGTB::allocate_and_load() {
             }
         }
     }
+
+    // promotions
+    for (PieceType promote_pt = KNIGHT; promote_pt <= QUEEN; ++promote_pt) {
+        if (bpieces[PAWN] > 0) {
+            bpieces[PAWN]--;
+            bpieces[promote_pt]++;
+            EGTB* egtb = new EGTB(wpieces, bpieces);
+            // if (!disable_allocate_promotion_tb) {
+                unzip_and_load_egtb(egtb, folder, true);
+                bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
+                bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
+                std::cout << "Loaded " << egtb->id << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+            // } else {
+            //     std::cout << "Disableed loading " << egtb->id << " for black promotion to " << PieceToChar[promote_pt] << ", white to move" << std::endl;
+            // }
+            this->WTM_EGTBs[promote_pt][NO_PIECE_TYPE] = egtb;
+            bpieces[PAWN]++;
+            bpieces[promote_pt]--;
+        }
+        if (wpieces[PAWN] > 0) {
+            wpieces[PAWN]--;
+            wpieces[promote_pt]++;
+            EGTB* egtb = new EGTB(bpieces, wpieces); 
+            // if (!disable_allocate_promotion_tb) {
+                unzip_and_load_egtb(egtb, folder, true); 
+                bytes_allocated += (egtb->num_pos * 2) * !egtb->mmaped;
+                bytes_mmaped += (egtb->num_pos * 2) * egtb->mmaped;
+                std::cout << "Loaded " << egtb->id << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+            // } else {
+            //     std::cout << "Disabled loading " << egtb->id << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+            // }
+            this->BTM_EGTBs[promote_pt][NO_PIECE_TYPE] = egtb;
+            wpieces[PAWN]++;
+            wpieces[promote_pt]--;
+        }
+    }
+    
 
     std::cout << "Bytes allocated: " << bytes_allocated << std::endl;
     std::cout << "Bytes mmaped: " << bytes_mmaped << std::endl;
@@ -606,6 +633,74 @@ void GenEGTB::check_consistency_allocated_by_level(int nthreads, int16_t MAX_LEV
     std::cout << "BTM Consistency check passed for draws" << std::endl;
 }
 
+void GenEGTB::retrograde_promotion_tbs(int nthreads) {
+    EGTB* egtb;
+    EGTB* (*PROMO_EGTBS)[6];
+    Color COLOR;
+
+    for (int wtm = 0; wtm <= 1; ++wtm) {
+        if (wtm) {
+            COLOR = WHITE;
+            PROMO_EGTBS = WTM_EGTBs;
+            egtb = BTM_EGTB;
+        } else {
+            COLOR = BLACK;
+            PROMO_EGTBS = BTM_EGTBs;
+            egtb = WTM_EGTB;
+        }
+        
+        int8_t V_FLIPS[8] = {0,  0, 56, 56,  0,  0, 56, 56};
+        int8_t H_FLIPS[8] = {0,  7,  0,  7,  0,  7,  0,  7};
+        int8_t SWAPS[8]   = {0,  0,  0,  0,  3,  3,  3,  3};
+
+        PieceType capture_pt = NO_PIECE_TYPE;
+        for (PieceType promotion_pt = KNIGHT; promotion_pt <= QUEEN; ++promotion_pt) {
+            if (PROMO_EGTBS[promotion_pt][capture_pt] == NULL) { continue; }
+            EGTB* PROMO_EGTB = PROMO_EGTBS[promotion_pt][capture_pt];
+            // unzip_and_load_egtb(PROMO_EGTB, folder, true);
+            std::cout << "Retrograde from color=" << ((COLOR == WHITE) ? "W" : "B") << ", promotion=" << PieceToChar[promotion_pt] << ", " << PROMO_EGTB->id << " with #positions=" << PROMO_EGTB->num_pos << std::endl;
+
+            int N_SYMMETRIES = PROMO_EGTB->npawns > 0 ? 2 : 8; // symmetries of 
+
+            #pragma omp parallel for num_threads(nthreads) schedule(static)
+            for (uint64_t ix = 0; ix < PROMO_EGTB->num_pos; ix++) {
+                EGPosition pos;
+                EGPosition transformed_pos;
+
+                pos.reset();
+                PROMO_EGTB->pos_at_ix(pos, ix, COLOR);
+
+                int16_t val = PROMO_EGTB->TB[ix];
+
+                // unused value in stored tb is 0, thus we have to check if this is a valid (used) position
+                if (val == 0 && !PROMO_EGTB->pos_ix_is_used(pos,ix)) continue;
+
+                int16_t lb = VAL_TO_LOWERBOUND(-val);
+
+                for (int t = 0; t < N_SYMMETRIES; t++) {
+                    transformed_pos.reset();
+                    transform_to(pos, transformed_pos, H_FLIPS[t], V_FLIPS[t], SWAPS[t]);
+
+                    for (Move move : EGMoveList<REVERSE>(transformed_pos, capture_pt, promotion_pt)) {
+                        transformed_pos.do_rev_move(move, UndoInfo(capture_pt,SQ_NONE));
+                        uint64_t egbt_ix = egtb->ix_from_pos(transformed_pos);
+
+                        // collisions should be very rare (e.g. two pawns that can promote)
+                        #pragma omp atomic compare
+                        if (egtb->TB[egbt_ix] < lb) { egtb->TB[egbt_ix] = lb; }
+                        // if egtb->TB[egbt_ix] is unset (==0), then 0 < VAL_TO_LOWERBOUND(LOSS_IN(0))
+
+                        transformed_pos.undo_rev_move(move);
+                    }
+
+                }
+            }
+
+            // free_egtb(PROMO_EGTB);
+        }
+
+    }
+}
 
 
 void GenEGTB::gen(int nthreads) {
@@ -617,9 +712,6 @@ void GenEGTB::gen(int nthreads) {
     std::cout << "Generate " << WTM_EGTB->num_pos << " " << WTM_EGTB->id << " and " << BTM_EGTB->num_pos << " " << BTM_EGTB->id << std::endl;
 
     TimePoint t0 = now();
-
-    int piece_count = 2;
-    for (int i = 0; i < 6; i++) piece_count += wpieces[i] + bpieces[i];
 
     allocate_and_load();
 
@@ -640,6 +732,10 @@ void GenEGTB::gen(int nthreads) {
 
     // Step 1. Get all infos from dependent tables.
 
+    if (disable_allocate_promotion_tb) {
+        retrograde_promotion_tbs(nthreads);
+    }
+
     for (int wtm = 0; wtm <= 1; ++wtm) {
         if (wtm) {
             LOSS_EGTB = WTM_EGTB;
@@ -657,7 +753,6 @@ void GenEGTB::gen(int nthreads) {
         uint64_t N_SYMMETRY = 0;
         uint64_t N_CHECKMATE = 0;
 
-
         #pragma omp parallel for num_threads(nthreads) schedule(static,CHUNKSIZE) \
         reduction(+:N_LEVEL_POS) reduction(+:N_SYMMETRY) reduction(+:N_SNTM_IN_CHECK) \
         reduction(+:N_ILLEGAL_EP) reduction(+:N_PIECE_COLLISION) reduction(+:N_CHECKMATE) \
@@ -667,7 +762,7 @@ void GenEGTB::gen(int nthreads) {
             pos.reset();
             LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
 
-            if (popcount(pos.pieces()) != piece_count) {
+            if (popcount(pos.pieces()) != LOSS_EGTB->npieces) {
                 N_PIECE_COLLISION++;
                 LOSS_EGTB->TB[ix] = UNUSED;
                 continue;
@@ -683,7 +778,8 @@ void GenEGTB::gen(int nthreads) {
                 N_SYMMETRY++;
                 LOSS_EGTB->TB[ix] = UNUSED;
                 continue;
-            } else {
+            } else if (!IS_LOWERBOUND(LOSS_EGTB->TB[ix])) {
+                // can have lower bound already from retrograde_promotion_tbs
                 LOSS_EGTB->TB[ix] = UNKNOWN;
             }
 
@@ -699,9 +795,14 @@ void GenEGTB::gen(int nthreads) {
 
             } else {
                 
-                int16_t max_val = LOSS_IN(0);
+                // can have lower bound already from retrograde_promotion_tbs
+                int16_t lb = LOWERBOUND_TO_VAL(LOSS_EGTB->TB[ix]);
+                int16_t max_val = IS_LOWERBOUND(LOSS_EGTB->TB[ix]) ? LOWERBOUND_TO_VAL(LOSS_EGTB->TB[ix]) : LOSS_IN(0);
+                int16_t max_val_2 = LOSS_IN(0);
+
                 bool has_full_eval = true;
                 bool has_partial_eval = false;
+
                 for (Move move : movelist) {
                     UndoInfo u = pos.do_move(move);
                     PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
@@ -709,12 +810,19 @@ void GenEGTB::gen(int nthreads) {
                         // move stays in TB, cannot determine eval
                         has_full_eval = false;
                     } else {
+                        has_partial_eval = true;
                         EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
                         uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
-                        max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
-                        has_partial_eval = true;
+                        max_val_2 = std::max(max_val_2, (int16_t) -cap_egtb->TB[fwd_ix]);
+                        if (!disable_allocate_promotion_tb || u.captured) {
+                            max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
+                        } // otherwise we must have lower bound from retrograde_promotion_tbs
                     }
                     pos.undo_move(move, u);
+                }
+                if (max_val_2 != max_val) {
+                    std::cout << max_val_2 << " vs " << max_val << "(lb: " << lb << ")" << std::endl;
+                    check_consistency(pos, true);
                 }
 
                 // either has_full_eval or has_partial_eval since we have at least one move
@@ -744,6 +852,7 @@ void GenEGTB::gen(int nthreads) {
                     }
                 }
             }
+            assert (!IS_LOWERBOUND(LOSS_EGTB->TB[ix]));
         }
 
         uint64_t N_UNUSED = N_SYMMETRY + N_ILLEGAL_EP + N_PIECE_COLLISION + N_SNTM_IN_CHECK;
@@ -960,6 +1069,8 @@ void GenEGTB::gen(int nthreads) {
     TimePoint t3 = now();
     std::cout << "Finished retrograde in " << (double) (t3 - t2) / 1000.0 << "s." << std::endl;
     
+    check_consistency_allocated_by_level(nthreads, LEVEL);
+
 
     // Step 4. Write to disk
 
@@ -998,14 +1109,23 @@ void GenEGTB::gen(int nthreads) {
 
     // Step 5. Consistency checks
 
-    if (do_consistency_checks) {
+    if (!disable_allocate_promotion_tb && do_consistency_checks) {
         // check_consistency_allocated_by_level(nthreads, LEVEL);
         check_consistency_allocated(nthreads);
     }
     TimePoint t5 = now();
     std::cout << "Finished consistency checks in " << (double) (t5 - t4)/ 1000.0 << "s." << std::endl;
     
+    deallocate_and_free();
+
+
+    if (!disable_allocate_promotion_tb && do_consistency_checks) {
+
+    }
     
+    TimePoint t6 = now();
+    std::cout << "Finished TB in " << (double) (t6 - t0)/ 1000.0 << "s." << std::endl;
+
     // Step 6. Compress files
     if (zip) {
         zip_egtb(WTM_EGTB, folder);
@@ -1015,12 +1135,10 @@ void GenEGTB::gen(int nthreads) {
 
         rm_all_unzipped_egtbs(folder);
     }
-    TimePoint t6 = now();
     if (zip) std::cout << "Compressed files in " << (double) (t6 - t5)/ 1000.0 << "s." << std::endl;
 
-    deallocate_and_free();
 
-    std::cout << "Finished TB in " << (double) (t6 - t0)/ 1000.0 << "s." << std::endl;
+
 }
 
 #endif

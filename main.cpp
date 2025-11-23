@@ -251,10 +251,13 @@ int main(int argc, char *argv[]) {
 
     int16_t longest_overall_mate = WIN_IN(0) + 1;
     std::string longest_overall_mate_str;
+
     bool check_longest_mate = false;
     bool generate_missing = true;
     bool generate_only_one = false;
     bool zip = false;
+    bool do_consistency_checks = true;
+    bool disable_allocate_promotion_tb = true;
 
     std::unordered_set<std::string> egtbs = {};
     
@@ -262,7 +265,7 @@ int main(int argc, char *argv[]) {
     uint64_t total_poscount = 0;
 
     int MIN_PIECE_COUNT = 0;
-    int MAX_PIECE_COUNT = 3;
+    int MAX_PIECE_COUNT = 2;
 
     int MIN_PAWN_COUNT = 0;
     int MAX_PAWN_COUNT = 3;
@@ -296,7 +299,7 @@ int main(int argc, char *argv[]) {
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
                                 if (generate_missing) {
-                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip, true);
+                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip, do_consistency_checks, disable_allocate_promotion_tb);
                                     g->gen(nthreads);
                                     if (generate_only_one) return 0;
                                 }
