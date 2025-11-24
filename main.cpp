@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
     uint64_t total_poscount = 0;
 
     int MIN_PIECE_COUNT = 0;
-    int MAX_PIECE_COUNT = 2;
+    int MAX_PIECE_COUNT = 3;
 
     int MIN_PAWN_COUNT = 0;
     int MAX_PAWN_COUNT = 3;
