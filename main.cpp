@@ -236,7 +236,6 @@ int main(int argc, char *argv[]) {
     pieces1 = {0, 0, 0, 0, 0, 0};
     pieces2 = {0, 0, 0, 0, 0, 0};
 
-    GenEGTB* g;
     std::string folder = "egtbs_new";
 
     // pieces1 = {0, 1, 1, 0, 0, 0};
@@ -299,8 +298,8 @@ int main(int argc, char *argv[]) {
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
                                 if (generate_missing) {
-                                    g = new GenEGTB(&pieces1[0], &pieces2[0], folder, zip, do_consistency_checks, disable_allocate_promotion_tb);
-                                    g->gen(nthreads);
+                                    GenEGTB g = GenEGTB(&pieces1[0], &pieces2[0], folder, zip, do_consistency_checks, disable_allocate_promotion_tb);
+                                    g.gen(nthreads);
                                     if (generate_only_one) return 0;
                                 }
 

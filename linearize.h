@@ -492,6 +492,8 @@ void transform_to(const EGPosition &pos, EGPosition &pos2, int8_t h_flip, int8_t
         if (p)
             pos2.put_piece(p, transform(sq, h_flip ^ v_flip, swap));
     }
+    if (pos.ep_square() != SQ_NONE)
+        pos2.set_ep_square(transform(pos.ep_square(), h_flip ^ v_flip, swap));
 
     pos2.set_side_to_move(pos.side_to_move());
 
