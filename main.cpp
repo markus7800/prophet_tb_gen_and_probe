@@ -211,8 +211,6 @@ int main(int argc, char *argv[]) {
     // exit(0);
 
 
-    EGPosition pos;
-
 
     assert (argc > 0);
     int nthreads = atoi(argv[1]);
@@ -220,47 +218,22 @@ int main(int argc, char *argv[]) {
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
 
-
-    // pieces1 = {0, 1, 1, 0, 0, 0};
-    // pieces2 = {0, 1, 0, 0, 0, 0};
-    // EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
-    // pos.put_piece(W_KING, SQ_B6);
-    // pos.put_piece(B_KING, SQ_A8);
-    // pos.put_piece(W_PAWN, SQ_D5);
-    // pos.put_piece(B_PAWN, SQ_C5);
-    // pos.put_piece(W_KNIGHT, SQ_G8);
-    // pos.set_ep_square(SQ_C6);
-    // uint64_t ix = egtb.ix_from_pos(pos);
-    // exit(1);
     
     pieces1 = {0, 0, 0, 0, 0, 0};
     pieces2 = {0, 0, 0, 0, 0, 0};
 
-    std::string folder = "egtbs_new";
+    std::string folder = "egtbs";
 
-    // pieces1 = {0, 1, 1, 0, 0, 0};
-    // pieces2 = {0, 0, 0, 1, 1, 0};
-    // g = new GenEGTB(&pieces1[0], &pieces2[0], folder, true);
-    // g->gen(nthreads);
-    // g->~GenEGTB();
-    // return 0;
-    
     Piece PIECES_ARR[] = {NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN};
 
 
-    int16_t longest_overall_mate = WIN_IN(0) + 1;
-    std::string longest_overall_mate_str;
-
-    bool check_longest_mate = false;
     bool generate_missing = true;
     bool generate_only_one = false;
-    bool zip = false;
+    bool zip = true;
     bool do_consistency_checks = true;
-    bool disable_allocate_promotion_tb = true;
 
     std::unordered_set<std::string> egtbs = {};
     
-    uint64_t val_count[512] = {0};
     uint64_t total_poscount = 0;
 
     int MIN_PIECE_COUNT = 0;
@@ -268,7 +241,6 @@ int main(int argc, char *argv[]) {
 
     int MIN_PAWN_COUNT = 0;
     int MAX_PAWN_COUNT = 3;
-
 
     for (int piece_count = MIN_PIECE_COUNT; piece_count <= MAX_PIECE_COUNT; piece_count++) {
         for (int pawn_count = MIN_PAWN_COUNT; pawn_count <= std::min(piece_count,MAX_PAWN_COUNT); pawn_count++ ) {
@@ -297,58 +269,12 @@ int main(int argc, char *argv[]) {
                             if (p.second) { // true if inserted
                                 EGTB egtb = EGTB(&pieces1[0], &pieces2[0]);
 
-                                if (generate_missing) {
+                                if (generate_missing && !egtb_exists(&egtb, folder)) {
+                                    bool disable_allocate_promotion_tb = (egtb.npieces == 6);
+
                                     GenEGTB g = GenEGTB(&pieces1[0], &pieces2[0], folder, zip, do_consistency_checks, disable_allocate_promotion_tb);
                                     g.gen(nthreads);
                                     if (generate_only_one) return 0;
-                                }
-
-                                if (check_longest_mate && egtb_exists(&egtb, folder)) {
-                                    std::cout << id << ": ";
-                                    
-                                    unzip_and_load_egtb(&egtb, folder, true);
-
-                                    int16_t longest_mate = WIN_IN(0) + 1;
-                                    uint64_t longest_mate_ix = 0;
-                                    total_poscount += egtb.num_pos;
-                                    bool corrupt = false;
-                                    for (uint64_t win_ix = 0; win_ix < egtb.num_pos; win_ix++) {
-                                        int16_t val = egtb.TB[win_ix];
-                                        if (!(IS_SET(val))) { std::cout << "CORRUPT: " << win_ix << ": " << val << std::endl; corrupt = true; };
-                                        if (val == 0) {
-                                            val_count[0]++;
-                                        } else {
-                                            val_count[WIN_IN(0) - abs(val) + 1]++;
-                                        }
-                                        if (0 < val && val < longest_mate) {
-                                            longest_mate = val;
-                                            longest_mate_ix = win_ix;
-                                        }
-                                    }
-                                    if (!corrupt) {
-                                        if (longest_mate == WIN_IN(0) + 1) {
-                                            std::cout << "no win." << std::endl;
-                                        } else {
-                                            pos.reset();
-                                            egtb.pos_at_ix(pos, longest_mate_ix, WHITE);
-                                            std::cout << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
-                                            if (longest_mate < longest_overall_mate) {
-                                                longest_overall_mate = longest_mate;
-                                                std::cout << "*";
-
-                                                std::ostringstream oss;
-                                                oss << get_egtb_identifier(&pieces1[0], &pieces2[0]) << ": " << pos.fen() << " " << WIN_IN(0) - egtb.TB[longest_mate_ix];
-                                                longest_overall_mate_str = oss.str();
-                                            }
-                                            std::cout << std::endl;
-                                        }
-                                    }
-
-
-                                    free_egtb(&egtb);
-
-                                    if (egtb_exists_zipped(&egtb, folder))
-                                        rm_unzipped_egtb(&egtb, folder); // TODO: add full path to egtb
                                 }
                             }
 
@@ -364,11 +290,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (check_longest_mate) std::cout << "Longest mate: " << longest_overall_mate_str << std::endl;
-
-    // for (int i = 0; i < 512; i++) {
-    //     printf("%3d: %10lu,\n", i, val_count[i]);
-    // }
     std::cout << "total count: " << total_poscount << std::endl;
 
     return 0;

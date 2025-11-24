@@ -935,9 +935,11 @@ void GenEGTB::gen(int nthreads) {
 
     TimePoint t0 = now();
 
-    bool allocate_promotion_tb = (WTM_EGTB->npawns + BTM_EGTB->npawns > 0) && !disable_allocate_promotion_tb;
+    // for now pawns we always load all tbs, else load promotion tbs dependent on disable_allocate_promotion_tb flag
+    bool all_tb_dependencies_loaded = (WTM_EGTB->npawns + BTM_EGTB->npawns == 0) || !disable_allocate_promotion_tb;
+
     allocate();
-    load_tb_dependencies(allocate_promotion_tb, true);
+    load_tb_dependencies(all_tb_dependencies_loaded, true);
     std::cout << "Bytes allocated: " << bytes_allocated << std::endl;
     std::cout << "Bytes mmaped: " << bytes_mmaped << std::endl;
 
@@ -958,7 +960,7 @@ void GenEGTB::gen(int nthreads) {
 
     // Step 1. Get all infos from dependent tables.
 
-    if (!allocate_promotion_tb) {
+    if (!all_tb_dependencies_loaded) {
         retrograde_promotion_tbs(nthreads);
     }
 
@@ -1336,14 +1338,14 @@ void GenEGTB::gen(int nthreads) {
 
     // Step 5. Consistency checks
 
-    if (allocate_promotion_tb && do_consistency_checks) {
+    if (all_tb_dependencies_loaded && do_consistency_checks) {
         // check_consistency_allocated_by_level(nthreads, LEVEL);
         check_consistency_allocated(nthreads);
     }
     
     deallocate();
 
-    if (!allocate_promotion_tb && do_consistency_checks) {
+    if (!all_tb_dependencies_loaded && do_consistency_checks) {
         check_consistency_max_bytes_allocated(nthreads, CONSISTENCY_CHECK_MAX_BYTES);
     }
 
@@ -1364,7 +1366,8 @@ void GenEGTB::gen(int nthreads) {
 
         std::cout << "Zipped " << WTM_EGTB->id << ".zip and " << BTM_EGTB->id << ".zip" << std::endl;
 
-        rm_all_unzipped_egtbs(folder + "/6men");
+        if (WTM_EGTB->npieces == 6)
+            rm_all_unzipped_egtbs(folder + "/6men");
     }
 
     TimePoint t7 = now();
