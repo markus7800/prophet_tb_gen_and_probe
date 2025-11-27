@@ -149,23 +149,42 @@ void store_egtb(EGTB* egtb, std::string root_folder) {
 void zip_egtb(EGTB* egtb, std::string root_folder) {
     std::string filename = egtb->get_filename(root_folder);
     std::string cmd = "zip -m " + filename + ".zip " + filename; // -m   move into zipfile (delete OS files)
+    std::cout << "CMD " << cmd << std::endl;
     system(cmd.c_str());
+}
+
+void zip_egtbs(EGTB* egtb1, EGTB* egtb2, std::string root_folder) {
+    if (egtb1->id == egtb2->id) {
+        zip_egtb(egtb1, root_folder);
+    } else {
+        std::string filename1 = egtb1->get_filename(root_folder);
+        std::string filename2 = egtb2->get_filename(root_folder);
+        std::string cmd = "zip -m " + filename1 + ".zip " + filename1;
+        cmd += " & ";
+        cmd += "zip -m " + filename2 + ".zip " + filename2;
+        cmd += " & wait";
+        std::cout << "CMD " << cmd << std::endl;
+        system(cmd.c_str());
+    }
 }
 
 void unzip_egtb(EGTB* egtb, std::string root_folder) {
     std::string filename = egtb->get_filename(root_folder);
     std::string cmd = "unzip -n " + filename; // -n  never overwrite existing files
+    std::cout << "CMD " << cmd << std::endl;
     system(cmd.c_str());
 }
 
 void rm_unzipped_egtb(EGTB* egtb, std::string root_folder) {
     std::string filename = egtb->get_filename(root_folder);
     std::string cmd = "rm " + filename;
+    std::cout << "CMD " << cmd << std::endl;
     system(cmd.c_str());
 }
 
 void rm_all_unzipped_egtbs(std::string folder) {
-    std::string cmd = "find " + folder + "-type f -name \"*.egtb\" -delete";
+    std::string cmd = "find " + folder + " -type f -name \"*.egtb\" -delete";
+    std::cout << "CMD " << cmd << std::endl;
     system(cmd.c_str());
 }
 
@@ -240,7 +259,7 @@ void free_egtb(EGTB* egtb) {
 }
 
 bool egtb_exists_zipped(EGTB* egtb, std::string root_folder) {
-    std::string filename = egtb->get_filename(root_folder);
+    std::string filename = egtb->get_filename(root_folder) + ".zip";
     return std::ifstream(filename).good();
 }
 
@@ -495,9 +514,9 @@ void GenEGTB::load_tb_dependencies(bool allocate_promotion_tb, bool verbose_when
                         add_to_bytes_count(egtb);
                         std::cout << "Loaded ";
                     }
-                    if (!promote_pt && capture_pt) std::cout << "Loaded " << egtb->id << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
-                    if (promote_pt && capture_pt)  std::cout << "Loaded " << egtb->id << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
-                    if (promote_pt && !capture_pt) std::cout << "Loaded " << egtb->id << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+                    if (!promote_pt && capture_pt) std::cout << egtb->id << " for black " << PieceToChar[capture_pt] << " captured, black to move"  << std::endl;
+                    if (promote_pt && capture_pt)  std::cout << egtb->id << " for black " << PieceToChar[capture_pt] << " captured with white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
+                    if (promote_pt && !capture_pt) std::cout << egtb->id << " for white promotion to " << PieceToChar[promote_pt] << ", black to move" << std::endl;
                 }
             }
         }
@@ -1304,9 +1323,14 @@ void GenEGTB::gen(int nthreads) {
     // Step 4. Write to disk
 
     // sets UNUSED to 0
-    store_egtb(WTM_EGTB, folder);
-    store_egtb(BTM_EGTB, folder);
-    std::cout << "Stored " << WTM_EGTB->id << " and " << BTM_EGTB->id << std::endl;
+    if (WTM_EGTB->id == BTM_EGTB->id) {
+        store_egtb(WTM_EGTB, folder);
+        std::cout << "Stored " << WTM_EGTB->id << std::endl;
+    } else {
+        store_egtb(WTM_EGTB, folder);
+        store_egtb(BTM_EGTB, folder);
+        std::cout << "Stored " << WTM_EGTB->id << " and " << BTM_EGTB->id << std::endl;
+    }
 
     // check file integrity (TODO: remove)
     EGTB WTM_EGTB_MMAP = EGTB(this->wpieces, this->bpieces);
@@ -1361,8 +1385,7 @@ void GenEGTB::gen(int nthreads) {
 
     // Step 6. Compress files
     if (zip) {
-        zip_egtb(WTM_EGTB, folder);
-        zip_egtb(BTM_EGTB, folder);
+        zip_egtbs(WTM_EGTB, BTM_EGTB, folder);
 
         std::cout << "Zipped " << WTM_EGTB->id << ".zip and " << BTM_EGTB->id << ".zip" << std::endl;
 

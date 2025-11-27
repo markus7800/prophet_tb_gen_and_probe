@@ -236,11 +236,11 @@ int main(int argc, char *argv[]) {
     
     uint64_t total_poscount = 0;
 
-    int MIN_PIECE_COUNT = 0;
-    int MAX_PIECE_COUNT = 3;
+    int MIN_PIECE_COUNT = 4;
+    int MAX_PIECE_COUNT = 4;
 
     int MIN_PAWN_COUNT = 0;
-    int MAX_PAWN_COUNT = 3;
+    int MAX_PAWN_COUNT = 0;
 
     for (int piece_count = MIN_PIECE_COUNT; piece_count <= MAX_PIECE_COUNT; piece_count++) {
         for (int pawn_count = MIN_PAWN_COUNT; pawn_count <= std::min(piece_count,MAX_PAWN_COUNT); pawn_count++ ) {
@@ -275,6 +275,8 @@ int main(int argc, char *argv[]) {
                                     GenEGTB g = GenEGTB(&pieces1[0], &pieces2[0], folder, zip, do_consistency_checks, disable_allocate_promotion_tb);
                                     g.gen(nthreads);
                                     if (generate_only_one) return 0;
+                                } else {
+                                    std::cout << "Already exists " << egtb.id << std::endl;
                                 }
                             }
 
