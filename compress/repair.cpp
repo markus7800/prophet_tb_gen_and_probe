@@ -1,43 +1,8 @@
 
 #include <iostream>
 #include <assert.h>
-
-typedef int16_t CODE;
-#define DUMMY_POS UINT16_MAX
-#define DUMMY_CODE INT16_MAX
-
-typedef struct Sequence {
-    CODE code;
-    uint16_t next;
-    uint16_t prev;
-} SEQ;
-
-typedef struct Pair {
-    CODE left;
-    CODE right;
-    uint64_t freq;  // frequency of the pair in the sequence
-    uint16_t f_pos; // first occurrence of pair in the sequence
-    uint16_t b_pos; // last occurrence of pair in the sequence
-    struct Pair *h_next; // next pair in hash table with same hash value
-    struct Pair *p_next; // next pair in priority queue with same frequency
-    struct Pair *p_prev; // previous pair in priority queue with same frequency
-} PAIR;
-
-typedef struct RePair_data_structures {
-    uint64_t txt_len;
-    SEQ *seq;
-
-    // hash table for pairs
-    uint64_t num_pairs;
-    uint64_t h_num;
-    PAIR **h_first;
-
-    // priority queue for pair frequencies from 0 to p_max
-    // p_que[i] points to the first pair with frequency i
-    // all pairs with frequency i are linked via p_next and p_prev
-    uint64_t p_max;
-    PAIR **p_que; 
-} RDS;
+#include "repair.h"
+#include "encoder.h"
 
 uint16_t leftPos_SQ(RDS *rds, uint16_t pos);
 uint16_t rightPos_SQ(RDS *rds, uint16_t pos);
@@ -223,7 +188,7 @@ void updateBlock_SQ(RDS *rds, CODE new_code, uint16_t target_pos) {
     }
 
   } else if (target_pos < rds->txt_len - 1) {
-    assert(false);
+    // assert(false);
     // rr_pos == DUMMY_POS
     // end of sequence edge case
     // target_pos target_pos+1  ...  r_pos  ...  rr_pos
@@ -494,6 +459,14 @@ void initRDS_by_counting_pairs(RDS *rds) {
   resetPQ(rds, 1);
 }
 
+void destructRDS(RDS *rds) {
+  free(rds->seq);
+  free(rds->h_first);
+  free(rds->p_que);
+  free(rds);
+}
+
+
 uint64_t replacePairs(RDS *rds, PAIR *max_pair, CODE new_code) {
   uint16_t i, j;
   uint64_t num_replaced = 0;
@@ -516,6 +489,51 @@ uint64_t replacePairs(RDS *rds, PAIR *max_pair, CODE new_code) {
   }
   resetPQ(rds, 1);
   return num_replaced;
+}
+
+#define INIT_DICTIONARY_SIZE (256*1024)
+#define DICTIONARY_SCALING_FACTOR (1.25)
+
+DICT *createDict(uint64_t txt_len, uint16_t CHAR_SIZE) {
+  uint i;
+  DICT* dict = (DICT*)malloc(sizeof(DICT));
+  dict->txt_len = txt_len;
+  dict->buff_size = INIT_DICTIONARY_SIZE;
+  dict->rule = (RULE*)malloc(sizeof(RULE)*dict->buff_size);
+  dict->seq_len = 0;
+  dict->comp_seq = NULL;
+  dict->num_rules = 0;
+
+  for (i = 0; i < dict->buff_size; i++) {
+    dict->rule[i].left = DUMMY_CODE;
+    dict->rule[i].right = DUMMY_CODE;
+  }
+
+  for (i = 0; i < CHAR_SIZE+1; i++) {
+    dict->rule[i].left  = (CODE)i;
+    dict->rule[i].right = DUMMY_CODE;
+    dict->num_rules++;
+  }
+
+  return dict;
+}
+
+CODE addNewPair(DICT *dict, PAIR *max_pair) {
+  RULE *rule = dict->rule;
+  CODE new_code = dict->num_rules++;
+
+  rule[new_code].left = max_pair->left;
+  rule[new_code].right = max_pair->right;
+
+  if (dict->num_rules >= dict->buff_size) {
+    dict->buff_size *= DICTIONARY_SCALING_FACTOR;
+    dict->rule = (RULE*)realloc(dict->rule, sizeof(RULE)*dict->buff_size);
+    if (dict->rule == NULL) {
+      puts("Memory reallocate error (rule) at addDict.");
+      exit(1);
+    }
+  }
+  return new_code;
 }
 
 typedef struct CompSeq {
@@ -551,8 +569,34 @@ CompSeq getCompSeq(RDS *rds) {
   return res;
 }
 
-void RunRepair(int batchsize) {
-    std::string filename = "KQQKBN.egtb";
+EDICT *convertDict(DICT *dict, uint16_t CHAR_SIZE) {
+  EDICT *edict = (EDICT*)malloc(sizeof(EDICT));
+  edict->txt_len = dict->txt_len;
+  edict->seq_len = dict->seq_len;
+  edict->num_rules = dict->num_rules;
+  edict->comp_seq = dict->comp_seq;
+  edict->rule  = dict->rule;
+  edict->tcode = (CODE*)malloc(sizeof(CODE)*dict->num_rules);
+
+  for (uint64_t i = 0; i <= CHAR_SIZE; i++) {
+    edict->tcode[i] = i;
+  }
+  for (uint64_t i = CHAR_SIZE+1; i < dict->num_rules; i++) {
+    edict->tcode[i] = DUMMY_CODE;
+  }
+
+  free(dict);
+  return edict;
+}
+
+
+void RunRepair(uint64_t batchsize) {
+    // std::string filename = "KQQKBN.egtb";
+    // 4.95 GB -> 522 MB with zip
+    // 441 MB without huff
+    std::string filename = "KBNKQQ.egtb";
+    // 5.49 GB -> 1.19 GB with zip
+    // 1.25 GB without huff
 
     FILE *f = fopen(filename.c_str(), "rb");
     if (f == NULL) {
@@ -569,79 +613,107 @@ void RunRepair(int batchsize) {
     fread(TB, sizeof(int16_t), count, f);
     fclose(f);
 
-    std::cout << "Read " << count << " entries from " << filename << std::endl;
+    uint16_t min_val = 1000;
+    for (uint64_t ix = 0; ix < count; ix++) {
+      if (TB[ix] != 0)
+        min_val = std::min(min_val, (uint16_t) abs(TB[ix]));
+    }
+    uint16_t CHAR_SIZE = 1000 - min_val + 1;
+    std::cout << "Read " << count << " entries from " << filename << " -> min_val=" << min_val << " and CHAR_SIZE=" << CHAR_SIZE << std::endl;
 
-    uint64_t size_w = batchsize;
+    uint64_t final_size = 0;
+    double avg_num_rules = 0.0;
+    for (uint64_t start = 0; start < count; start += batchsize) {
+      
+      uint64_t size_w = std::min(batchsize, count - start);
 
-    // init sequence
-    SEQ* seq = (SEQ*) malloc(size_w * sizeof(SEQ));
-    for (uint16_t i = 0; i < size_w; i++) {
-        seq[i].code = TB[i];
+      // init sequence
+      SEQ* seq = (SEQ*) malloc(size_w * sizeof(SEQ));
+      for (uint16_t i = 0; i < size_w; i++) {
+        if (TB[start + i] == 0) {
+          seq[i].code = 0;
+        } else {
+          seq[i].code = abs(TB[start + i]) - min_val + 1;
+        }
         seq[i].next = DUMMY_POS;
         seq[i].prev = DUMMY_POS;
+      }
+
+      // init hash table
+      uint64_t h_num = INIT_HASH_NUM;
+      Pair** h_first = (PAIR**) malloc(sizeof(PAIR*) * primes[h_num]);
+      for (uint64_t i = 0; i < primes[h_num]; i++) {
+          h_first[i] = NULL;
+      }
+
+      // init priority queue
+      uint64_t p_max = (uint64_t) ceil(sqrt((double) size_w)) + 10;
+      PAIR** p_que = (PAIR**) malloc(sizeof(PAIR*) * p_max);
+      for (uint64_t i = 0; i < p_max; i++) {
+          p_que[i] = NULL;
+      }
+      
+      // populate RDS object
+      RDS* rds = (RDS*) malloc(sizeof(RDS));
+      rds->txt_len = size_w;
+      rds->seq = seq;
+      rds->num_pairs = 0;
+      rds->h_num = h_num;
+      rds->h_first = h_first;
+      rds->p_max = p_max;
+      rds->p_que = p_que;
+
+      initRDS_by_counting_pairs(rds);
+
+      DICT* dict = createDict(rds->txt_len, CHAR_SIZE);
+
+
+      uint64_t num_rules = 0;
+      uint64_t num_replaced = 0;
+      PAIR* max_pair;
+      while ((max_pair = getMaxPair(rds)) != NULL) {
+        num_rules++;
+        CODE new_code = addNewPair(dict, max_pair);
+        num_replaced += replacePairs(rds, max_pair, new_code);
+      }
+      // std::cout << "Total number of replacements: " << num_replaced << std::endl;
+      // std::cout << "Total number of rules: " << num_rules << std::endl;
+      CompSeq comp_seq = getCompSeq(rds);
+      // std::cout << "Compressed sequence length: " << comp_seq.len << std::endl;
+
+      avg_num_rules += (double) num_rules / (count/batchsize + 1);
+
+      // PAIR* max_pair = getMaxPair(rds);
+      // replacePairs(rds, max_pair, 1001);
+
+      // std::cout << "Number of distinct pairs: " << rds->num_pairs << std::endl;
+      // for (uint64_t i = 0; i < p_max; i++) {
+      //     PAIR* p = rds->p_que[i];
+      //     if (p != NULL) {
+      //         std::cout << "Frequency " << i << ": ";
+      //         while (p != NULL) {
+      //             std::cout << "(" << p->left << "," << p->right << ", freq=" << p->freq << ") ";
+      //             p = p->p_next;
+      //         }
+      //         std::cout << std::endl;
+      //     }
+      // }
+      EDICT* edict = convertDict(dict, CHAR_SIZE);
+      uint64_t nbits_to_encode_cfg = EncodeCFG(edict, CHAR_SIZE);
+      DestructEDict(edict);
+      destructRDS(rds);
+
+
+      final_size += 2*comp_seq.len + (nbits_to_encode_cfg / 8 + 1);
     }
+    std::cout << "final size: " << final_size << " " << (double) final_size / (count*2.0) << std::endl;
 
     free(TB);
-
-    // init hash table
-    uint64_t h_num = INIT_HASH_NUM;
-    Pair** h_first = (PAIR**) malloc(sizeof(PAIR*) * primes[h_num]);
-    for (uint64_t i = 0; i < primes[h_num]; i++) {
-        h_first[i] = NULL;
-    }
-
-    // init priority queue
-    uint64_t p_max = (uint64_t) ceil(sqrt((double) size_w)) + 10;
-    PAIR** p_que = (PAIR**) malloc(sizeof(PAIR*) * p_max);
-    for (uint64_t i = 0; i < p_max; i++) {
-        p_que[i] = NULL;
-    }
-    
-    // populate RDS object
-    RDS* rds = (RDS*) malloc(sizeof(RDS));
-    rds->txt_len = size_w;
-    rds->seq = seq;
-    rds->num_pairs = 0;
-    rds->h_num = h_num;
-    rds->h_first = h_first;
-    rds->p_max = p_max;
-    rds->p_que = p_que;
-
-    initRDS_by_counting_pairs(rds);
-
-    uint64_t num_rules = 0;
-    uint64_t num_replaced = 0;
-    PAIR* max_pair;
-    while ((max_pair = getMaxPair(rds)) != NULL) {
-      num_rules++;
-      CODE new_code = 1000 + num_rules;
-      num_replaced += replacePairs(rds, max_pair, new_code);
-    }
-    std::cout << "Total number of replacements: " << num_replaced << std::endl;
-    std::cout << "Total number of rules: " << num_rules << std::endl;
-    CompSeq comp_seq = getCompSeq(rds);
-    std::cout << "Compressed sequence length: " << comp_seq.len << std::endl;
-
-    // PAIR* max_pair = getMaxPair(rds);
-    // replacePairs(rds, max_pair, 1001);
-
-    // std::cout << "Number of distinct pairs: " << rds->num_pairs << std::endl;
-    // for (uint64_t i = 0; i < p_max; i++) {
-    //     PAIR* p = rds->p_que[i];
-    //     if (p != NULL) {
-    //         std::cout << "Frequency " << i << ": ";
-    //         while (p != NULL) {
-    //             std::cout << "(" << p->left << "," << p->right << ", freq=" << p->freq << ") ";
-    //             p = p->p_next;
-    //         }
-    //         std::cout << std::endl;
-    //     }
-    // }
-
 }
 
 
 int main(int argc, char *argv[]) {
     RunRepair(UINT16_MAX);
+    // RunRepair(8192);
     return 0;
 }
