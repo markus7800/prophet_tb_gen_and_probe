@@ -9,3 +9,4 @@ tmp*
 *.gz
 *.zip.0
 repair
+*.DS_Store

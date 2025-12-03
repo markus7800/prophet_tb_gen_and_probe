@@ -589,16 +589,54 @@ EDICT *convertDict(DICT *dict, uint16_t CHAR_SIZE) {
   return edict;
 }
 
+struct Node {
+    uint64_t freq;
+    CODE symbol;      // >=0 for leaves, -1 for internal
+    Node* left;
+    Node* right;
 
-void RunRepair(uint64_t batchsize) {
-    // std::string filename = "KQQKBN.egtb";
-    // 4.95 GB -> 522 MB with zip
-    // 441 MB without huff
-    std::string filename = "KBNKQQ.egtb";
-    // 5.49 GB -> 1.19 GB with zip
-    // 1.25 GB without huff
+    Node(uint32_t f, int s, Node* L=nullptr, Node* R=nullptr)
+        : freq(f), symbol(s), left(L), right(R) {}
+    ~Node() {
+        delete left;
+        delete right;
+    }
+};
+struct NodeCmp {
+    bool operator()(const Node* a, const Node* b) const {
+        return a->freq > b->freq;
+    }
+};
+Node* buildTree(uint64_t* freq, uint16_t size) {
+    std::priority_queue<Node*, std::vector<Node*>, NodeCmp> pq;
 
-    FILE *f = fopen(filename.c_str(), "rb");
+    for (int i=0; i < size; i++)
+        if (freq[i] > 0)
+            pq.push(new Node(freq[i], i));
+
+    if (pq.empty())
+        return new Node(1, 0); // dummy tree if input empty
+
+    while (pq.size() > 1) {
+        Node* a = pq.top(); pq.pop();
+        Node* b = pq.top(); pq.pop();
+        pq.push(new Node(a->freq + b->freq, DUMMY_CODE, a, b));
+    }
+    return pq.top();
+}
+void extractLengths(Node* n, int depth, uint64_t* lengths) {
+    if (!n) return;
+    if (n->symbol != DUMMY_CODE) {
+        lengths[n->symbol] = depth;
+        return;
+    }
+    extractLengths(n->left,  depth + 1, lengths);
+    extractLengths(n->right, depth + 1, lengths);
+}
+
+void RunRepair(uint64_t batchsize, char* filename) {
+
+    FILE *f = fopen(filename, "rb");
     if (f == NULL) {
         std::cerr << "Error opening file: " << filename << std::endl;
         return;
@@ -621,8 +659,13 @@ void RunRepair(uint64_t batchsize) {
     uint16_t CHAR_SIZE = 1000 - min_val + 1;
     std::cout << "Read " << count << " entries from " << filename << " -> min_val=" << min_val << " and CHAR_SIZE=" << CHAR_SIZE << std::endl;
 
+    // global huff
+    uint64_t* freq = (uint64_t*) calloc(UINT16_MAX, sizeof(uint64_t));
+    uint64_t* lengths = (uint64_t*) calloc(UINT16_MAX, sizeof(uint64_t));
+
     uint64_t final_size = 0;
     double avg_num_rules = 0.0;
+    double avg_seq_len = 0.0;
     for (uint64_t start = 0; start < count; start += batchsize) {
       
       uint64_t size_w = std::min(batchsize, count - start);
@@ -671,17 +714,20 @@ void RunRepair(uint64_t batchsize) {
       uint64_t num_rules = 0;
       uint64_t num_replaced = 0;
       PAIR* max_pair;
+      CODE new_code = 0;
       while ((max_pair = getMaxPair(rds)) != NULL) {
         num_rules++;
-        CODE new_code = addNewPair(dict, max_pair);
+        new_code = addNewPair(dict, max_pair);
         num_replaced += replacePairs(rds, max_pair, new_code);
       }
+      CODE max_code = new_code;
       // std::cout << "Total number of replacements: " << num_replaced << std::endl;
       // std::cout << "Total number of rules: " << num_rules << std::endl;
       CompSeq comp_seq = getCompSeq(rds);
       // std::cout << "Compressed sequence length: " << comp_seq.len << std::endl;
 
       avg_num_rules += (double) num_rules / (count/batchsize + 1);
+      avg_seq_len += (double) comp_seq.len / (count/batchsize + 1);
 
       // PAIR* max_pair = getMaxPair(rds);
       // replacePairs(rds, max_pair, 1001);
@@ -699,21 +745,91 @@ void RunRepair(uint64_t batchsize) {
       //     }
       // }
       EDICT* edict = convertDict(dict, CHAR_SIZE);
-      uint64_t nbits_to_encode_cfg = EncodeCFG(edict, CHAR_SIZE);
+      uint64_t cfg_bits = EncodeCFG(edict, CHAR_SIZE);
       DestructEDict(edict);
       destructRDS(rds);
 
+      final_size += (cfg_bits / 8 + 1);
+      // final_size += 2*comp_seq.len; 
 
-      final_size += 2*comp_seq.len + (nbits_to_encode_cfg / 8 + 1);
+      // global huff
+      for (uint64_t i = 0; i < comp_seq.len; i++) freq[comp_seq.seq[i]]++;
+
+      // huff
+      // uint64_t* freq = (uint64_t*) calloc(max_code+1, sizeof(uint64_t));
+      // uint64_t* lengths = (uint64_t*) calloc(max_code+1, sizeof(uint64_t));
+      // for (uint64_t i = 0; i < comp_seq.len; i++) freq[comp_seq.seq[i]]++;
+      // Node* tree = buildTree(freq, max_code + 1);
+      // extractLengths(tree, 0, lengths);
+
+      // uint64_t huffcoded_seq_bits = 0;
+      // uint64_t nonzero_symbols = 0;
+      // for (CODE code = 0; code <= max_code; code++) {
+      //   huffcoded_seq_bits += freq[code] * lengths[code];
+      //   nonzero_symbols += (freq[code] > 0);
+      // }
+      // final_size += (huffcoded_seq_bits / 8) + 1;
+      // final_size += nonzero_symbols; // optimal 1 byte length canonical
+
+      // free(freq);
+      // free(lengths);
+      // delete tree;
     }
-    std::cout << "final size: " << final_size << " " << (double) final_size / (count*2.0) << std::endl;
 
+    // global huff
+    Node* tree = buildTree(freq, UINT16_MAX);
+    extractLengths(tree, 0, lengths);
+
+    uint64_t huffcoded_seq_bits = 0;
+    uint64_t nonzero_symbols = 0;
+    for (CODE code = 0; code < UINT16_MAX; code++) {
+      huffcoded_seq_bits += freq[code] * lengths[code];
+      nonzero_symbols += (freq[code] > 0);
+    }
+    final_size += (huffcoded_seq_bits / 8) + 1;
+    final_size += nonzero_symbols * 4;
+
+    free(freq);
+    free(lengths);
+    delete tree;
+
+
+    std::cout << "final size: " << final_size << " " << (double) final_size / (count*2.0) << std::endl;
+    std::cout << "avg_num_rules: " << avg_num_rules << ", avg_seq_len: " << avg_seq_len << std::endl;
     free(TB);
 }
 
 
 int main(int argc, char *argv[]) {
-    RunRepair(UINT16_MAX);
-    // RunRepair(8192);
-    return 0;
+  assert(argc == 2);
+  char* filename = argv[1];
+  // "KQQKBN.egtb";
+  // 4.95 GB -> 522 MB with zip
+  // 441 MB without huff-encoded seq
+  // 280 MB with huff-encoding but without trees
+  // 344 MB with huff-encoding with trees
+  // 295 MB global huff
+  
+  // "KBNKQQ.egtb";
+  // 5.49 GB -> 1.19 GB with zip
+  // 1.25 GB without huff-encoded seq
+  // 838 MB with huff-encoding but without trees
+  // 971 MB with huff-encoding but with trees
+  // 865 MB global huff
+
+  // target < 1.41 GB
+
+
+
+  // KQBKNP.egtb
+  // 32.47 GB -> 3.97 GB with zip
+
+  // KNPKQB.egtb
+  // -> 
+
+  // target < 8GB
+
+  // RunRepair(UINT16_MAX, filename);
+  RunRepair(8192, filename);
+  return 0;
 }
