@@ -35,7 +35,7 @@ void count_broken(EGTB* egtb) {
             n_piece_collision++;
         } else if (pos.sntm_in_check()) {
             n_sntm_in_check++;
-        } else if ((ix > egtb->num_nonep_pos) && !pos.check_ep(pos.ep_square())) {
+        } else if ((ix >= egtb->num_nonep_pos) && !pos.check_ep(pos.ep_square())) {
             n_illegal_ep++;
         } else if (egtb->ix_from_pos(pos) != ix) {
             n_unused++;
@@ -218,7 +218,6 @@ int main(int argc, char *argv[]) {
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
 
-    
     pieces1 = {0, 0, 0, 0, 0, 0};
     pieces2 = {0, 0, 0, 0, 0, 0};
 
@@ -237,8 +236,8 @@ int main(int argc, char *argv[]) {
     int MIN_PIECE_COUNT = 4;
     int MAX_PIECE_COUNT = 4;
 
-    int MIN_PAWN_COUNT = 1;
-    int MAX_PAWN_COUNT = 1;
+    int MIN_PAWN_COUNT = 4;
+    int MAX_PAWN_COUNT = 4;
 
     int count = 0;
     for (int piece_count = MIN_PIECE_COUNT; piece_count <= MAX_PIECE_COUNT; piece_count++) {

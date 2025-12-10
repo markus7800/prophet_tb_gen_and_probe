@@ -1158,7 +1158,7 @@ void GenEGTB::gen(int nthreads) {
         }
 
         uint64_t N_UNUSED = N_SYMMETRY + N_ILLEGAL_EP + N_PIECE_COLLISION + N_SNTM_IN_CHECK;
-        std::cout << "Stats for " << ((wtm) ? get_egtb_identifier(wpieces, bpieces) : get_egtb_identifier(bpieces, wpieces)) << ":\n";
+        std::cout << "Stats for " << LOSS_EGTB->id << ":" << std::endl;
         std::cout << "    # Non-EP positions: " << LOSS_EGTB->num_nonep_pos << " (" << (double) LOSS_EGTB->num_nonep_pos / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         std::cout << "    # EP positions: " << LOSS_EGTB->num_ep_pos << " (" << (double) LOSS_EGTB->num_ep_pos / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
         std::cout << "    Checkmate count: " << N_CHECKMATE << " (" << (double) N_CHECKMATE / LOSS_EGTB->num_pos * 100 << "%)" << std::endl;
@@ -1418,6 +1418,8 @@ void GenEGTB::gen(int nthreads) {
         if (WTM_EGTB->npieces == 6) {
             rm_all_unzipped_egtbs(folder + "/6men/0pawns");
             rm_all_unzipped_egtbs(folder + "/6men/1pawns");
+            rm_all_unzipped_egtbs(folder + "/6men/2pawns");
+            rm_all_unzipped_egtbs(folder + "/6men/3pawns");
         }
     }
 
