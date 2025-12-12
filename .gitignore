@@ -10,3 +10,4 @@ tmp*
 *.zip.0
 repair
 *.DS_Store
+logs

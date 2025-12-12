@@ -17,3 +17,6 @@ build:
 	g++ -g $(flags) -c -o main.o main.cpp
 	g++ -g -o main bitboard.o main.o uci.o $(flags)
 
+mates:
+	g++ -g $(flags)  -c -o longest_mate.o longest_mate.cpp
+	g++ -g -o longest_mate bitboard.o longest_mate.o uci.o  $(flags)
