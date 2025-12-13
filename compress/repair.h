@@ -136,6 +136,7 @@ void incrementPair(RDS *rds, PAIR *target);
 void decrementPair(RDS *rds, PAIR *target);
 uint64_t replacePairs(RDS *rds, PAIR *max_pair, CODE new_code);
 PAIR* getMaxPair(RDS *rds);
+PAIR* findPair(RDS *rds, CODE left, CODE right);
 PAIR *createPair(RDS *rds, CODE left, CODE right, uint16_t f_pos);
 void destructPair(RDS *rds, PAIR *target);
 void resetPQ(RDS *rds, uint64_t p_num);

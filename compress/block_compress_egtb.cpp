@@ -5,10 +5,17 @@
 #include <iostream>
 #include <cassert>
 #include <filesystem>
+#include <vector>
 namespace fs = std::filesystem;
+#include "libdeflate.h"
 
+// #define BLOCKSIZE uint64_t(33554432)
+// #define BLOCKSIZE uint64_t(1048576)
+// #define BLOCKSIZE uint64_t(60000)
 // #define BLOCKSIZE uint64_t(32768)
 #define BLOCKSIZE uint64_t(8192)
+// #define BLOCKSIZE uint64_t(1024)
+
 
 uint64_t compress_block(int16_t* TB_BLOCK, int16_t min_nonzero_val, uint64_t size_w, uint64_t freq_local[], RDS* rds) {
 
@@ -51,7 +58,6 @@ uint64_t compress_block(int16_t* TB_BLOCK, int16_t min_nonzero_val, uint64_t siz
   DICT* dict = createDict(rds->txt_len, CHAR_SIZE);
     
   uint64_t num_rules = 0;
-  uint64_t num_replaced = 0;
   PAIR* max_pair;
   CODE new_code = 0;
   while ((max_pair = getMaxPair(rds)) != NULL) {
@@ -243,14 +249,27 @@ uint64_t compress_egtb_old(const char* filename) {
 
     initRDS_by_counting_pairs(rds);
 
+
     DICT* dict = createDict(rds->txt_len, CHAR_SIZE);
-    
-    
+
+    // CODE zero_code = 0;
+    // PAIR* zero_pair;
+    // for (int i = 0; i < 5; i++) {
+    //   if ((zero_pair = findPair(rds, zero_code, zero_code)) != NULL) {
+    //     if (zero_pair->freq > 1) {
+    //       zero_code = addNewPair(dict, zero_pair);;
+    //       replacePairs(rds, zero_pair, zero_code);
+    //     }
+    //   }
+    // }
+
+
     uint64_t num_rules = 0;
     uint64_t num_replaced = 0;
     PAIR* max_pair;
     CODE new_code = 0;
     while ((max_pair = getMaxPair(rds)) != NULL) {
+      // if (num_rules == 0) std::cout << "max_pair: (" << max_pair->left << "," << max_pair->right << ")\n";
       freq[max_pair->left]++;
       freq[max_pair->right]++;
       // freq[max_pair->left & 0xff]++;
@@ -315,7 +334,74 @@ uint64_t compress_egtb_old(const char* filename) {
 
 
   std::cout << "final size: " << final_size << " " << (double) final_size / (count*2.0) << std::endl;
+  std::cout << "nonzero_symbols: " << nonzero_symbols << ", n_batches: " << n_batches << std::endl;
   std::cout << "avg_num_rules: " << avg_num_rules << ", avg_seq_len: " << avg_seq_len << ", avg_cfg_bytes: " << avg_cfg_bytes << std::endl;
+  free(TB);
+
+  return final_size;
+}
+
+
+uint64_t compress_egtb_libdeflate(const char* filename) {
+
+  FILE *f = fopen(filename, "rb");
+  if (f == NULL) {
+      std::cerr << "Error opening file: " << filename << std::endl;
+      return 0;
+  }
+  fseek(f, 0, SEEK_END);
+  long file_size = ftell(f);
+  rewind(f);
+
+  size_t num_pos = file_size / sizeof(int16_t);
+  int16_t *TB = (int16_t*) malloc(num_pos * sizeof(int16_t));
+
+  fread(TB, sizeof(int16_t), num_pos, f);
+  fclose(f);
+
+  uint64_t final_size = 0;
+  std::vector<uint8_t> compressed(BLOCKSIZE*2);
+  std::vector<uint8_t> decompressed(BLOCKSIZE*2);
+
+  uint64_t n_blocks = ceil((double) num_pos / BLOCKSIZE);
+
+  for (uint64_t start = 0; start < num_pos; start += BLOCKSIZE) {
+    
+    uint64_t size_w = std::min(BLOCKSIZE, num_pos - start);
+
+
+    libdeflate_compressor* compressor = libdeflate_alloc_compressor(10);
+
+    uint64_t compressed_size = libdeflate_deflate_compress(compressor, (uint8_t*) &TB[start], 2*size_w, compressed.data(), compressed.size());
+
+    if (compressed_size == 0) {
+      std::cerr << "Compression failed\n";
+      return 1;
+    }
+
+    final_size += compressed_size;
+
+#if 0
+    uint16_t unused;
+    libdeflate_free_compressor(compressor);
+
+    libdeflate_decompressor* decompressor = libdeflate_alloc_decompressor();
+    size_t actual_size;
+    libdeflate_result res = libdeflate_deflate_decompress(decompressor, compressed.data(), compressed.size(), decompressed.data(), decompressed.size(), &actual_size);
+    
+    if (res != LIBDEFLATE_SUCCESS) {
+      std::cerr << res << " Decompression failed\n";
+      return 1;
+    }
+
+    libdeflate_free_decompressor(decompressor);
+#endif
+
+  }
+
+  final_size += n_blocks * 2; // jump table
+  std::cout << "final size: " << final_size << " " << (double) final_size / file_size << std::endl;
+ 
   free(TB);
 
   return final_size;
@@ -348,7 +434,10 @@ int main(int argc, char *argv[]) {
   
   // compress_egtb("../egtbs/5men/1pawns/KRPKQ.egtb", 1);
   // compress_egtb_old("../egtbs/5men/1pawns/KRPKQ.egtb");
-  compress_egtb_old("../egtbs/5men/1pawns/KRKRP.egtb");
+
+  const char* filename = "../egtbs/5men/1pawns/KRKRP.egtb";
+  // compress_egtb_old(filename);
+  compress_egtb_libdeflate(filename);
 
   return 0;
 }

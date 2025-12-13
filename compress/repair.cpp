@@ -271,6 +271,21 @@ void decrementPair(RDS *rds, PAIR *target) {
   }
 }
 
+PAIR* findPair(RDS *rds, CODE left, CODE right) {
+  uint64_t h = hash_val(rds->h_num, left, right);
+  PAIR *p = rds->h_first[h];
+    
+  // search for pair in hash table
+  while (p != NULL) {
+    if (p->left == left && p->right == right) {
+      break;
+    }
+    p = p->h_next;
+  }
+  return p;
+}
+
+
 PAIR* getMaxPair(RDS *rds) {
   PAIR **p_que = rds->p_que;
   PAIR *p, *max_pair;

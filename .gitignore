@@ -12,3 +12,5 @@ repair
 *.DS_Store
 logs
 *.out
+compress/libdeflate/*
+!compress/libdeflate/libdeflate.h
