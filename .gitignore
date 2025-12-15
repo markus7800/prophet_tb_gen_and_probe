@@ -14,3 +14,8 @@ logs
 *.out
 compress/libdeflate/*
 !compress/libdeflate/libdeflate.h
+compress/zstd/*
+!compress/zstd/lib/zstd.h
+compress/lz4/*
+!compress/lz4/lib/lz4.h
+egtbs/*
