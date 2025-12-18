@@ -4,9 +4,9 @@ import pathlib
 sizes = {}
 for d, _, files in os.walk("egtbs"):
     for file in files:
-        if file.endswith(".zip"):
+        if file.endswith(".bz"):
             
-            sizes[file[:-len(".egtb.zip")]] = pathlib.Path(d, file).stat().st_size
+            sizes[file[:-len(".egtb.bz")]] = pathlib.Path(d, file).stat().st_size
 
 
 # print(sizes)

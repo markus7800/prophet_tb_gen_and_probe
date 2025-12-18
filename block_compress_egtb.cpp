@@ -12,7 +12,7 @@
 #include <fcntl.h> // open
 #include <sys/mman.h> // mmap
 #include <sys/stat.h> // file size
-#include "../misc.h"
+#include "misc.h"
 namespace fs = std::filesystem;
 
 // #define LIBDEFLATE
@@ -21,15 +21,7 @@ namespace fs = std::filesystem;
 
 #define EXT ".bz"
 
-#ifdef LIBDEFLATE
-  #include "libdeflate.h"
-#endif
-#ifdef ZSTD
-  #include <zstd.h>
-#endif
-#ifdef LZ4
-  #include <lz4hc.h>
-#endif
+#include <zstd.h>
 
 uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, int nthreads) {
   uint64_t s = 0;
@@ -74,29 +66,15 @@ uint64_t compress_egtb(std::string filename, int nthreads, int compression_level
     // thread-private allocations
     std::vector<uint8_t> compressed(block_size*2);
 
-    #ifdef LIBDEFLATE
-      libdeflate_compressor* compressor = libdeflate_alloc_compressor(compression_level);
-    #endif
-
-
     
     #pragma omp for schedule(static) reduction(+:final_size)
     for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
       uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
       uint64_t block_ix = start_ix / block_size;
 
+      uint64_t compressed_size = ZSTD_compress(compressed.data(), compressed.size(),  (uint8_t*) &TB[start_ix], size, compression_level);
+      assert (!ZSTD_isError(compressed_size));
 
-      #ifdef LIBDEFLATE
-        uint64_t compressed_size = libdeflate_deflate_compress(compressor, (uint8_t*) &TB[start_ix], size, compressed.data(), compressed.size());
-      #endif
-      #ifdef ZSTD
-        uint64_t compressed_size = ZSTD_compress(compressed.data(), compressed.size(),  (uint8_t*) &TB[start_ix], size, compression_level);
-        assert (!ZSTD_isError(compressed_size));
-      #endif
-      #ifdef LZ4
-        uint64_t compressed_size = LZ4_compress_HC((char*) &TB[start_ix], (char*) compressed.data(), size, compressed.size(), compression_level);
-      #endif
-      
 
       if (compressed_size == 0) {
         std::cerr << "Compression failed\n";
@@ -108,9 +86,6 @@ uint64_t compress_egtb(std::string filename, int nthreads, int compression_level
       std::memcpy(&TB[start_ix], compressed.data(), compressed_size);
     }
 
-    #ifdef LIBDEFLATE
-      libdeflate_free_compressor(compressor);
-    #endif
   }
 
   final_size += large_blocks ? sizeof(uint32_t) * n_blocks : sizeof(uint16_t) * n_blocks;
@@ -168,15 +143,10 @@ struct CompressedEGTB {
   uint8_t* map_ptr;
   uint8_t* compressed_blocks;
   int16_t* uncompressed_buf;
-  #ifdef LIBDEFLATE
-    libdeflate_decompressor* decompressor;
-  #endif
-  #ifdef ZSTD
-    ZSTD_DCtx* decompressor;
-  #endif
+  ZSTD_DCtx* decompressor;
 
-  CompressedEGTB(std::string filename) {
-    this->filename = filename;
+  CompressedEGTB(std::string filename_) {
+    this->filename = filename_;
 
     size_t slash = filename.find_last_of('/');
     size_t dot = filename.find_last_of('.');
@@ -227,12 +197,7 @@ struct CompressedEGTB {
       offset += this->block_sizes[block_ix];
     }
 
-    #ifdef LIBDEFLATE
-      this->decompressor = libdeflate_alloc_decompressor();
-    #endif
-    #ifdef ZSTD
-      this->decompressor = ZSTD_createDCtx();
-    #endif
+    this->decompressor = ZSTD_createDCtx();
 
     // std::cout << "CompressedEGTB" << this->egtb_id << ": filesize=" << this->filesize << ", num_pos=" << this->num_pos << ", block_size=" << this->block_size << ", n_blocks=" << this->n_blocks << std::endl;
   }
@@ -248,12 +213,8 @@ struct CompressedEGTB {
     free(this->block_offsets);
     free(this->uncompressed_buf);
 
-    #ifdef LIBDEFLATE
-      libdeflate_free_decompressor(this->decompressor);
-    #endif
-    #ifdef ZSTD
-      ZSTD_freeDCtx(this->decompressor);
-    #endif
+
+    ZSTD_freeDCtx(this->decompressor);
   }
 
   int16_t get(uint64_t ix) {
@@ -261,25 +222,10 @@ struct CompressedEGTB {
     uint64_t ix_in_block = ix % block_size;
     uint64_t offset = block_offsets[block_ix];
     uint64_t size = std::min(block_size, num_pos - block_ix*block_size) * sizeof(int16_t);
-
-    #ifdef LIBDEFLATE
-      libdeflate_result res = libdeflate_deflate_decompress(decompressor,
-        &compressed_blocks[offset], block_sizes[block_ix],
-        uncompressed_buf, size, NULL);
-      assert (res == 0);
-    #endif
-    #ifdef ZSTD
-      size_t res = ZSTD_decompressDCtx(decompressor,
-        uncompressed_buf, size,
-        &compressed_blocks[offset], block_sizes[block_ix]);
-      assert (!ZSTD_isError(res));
-    #endif
-    #ifdef LZ4
-    int res = LZ4_decompress_safe(
-      (char*) &compressed_blocks[offset], (char*) uncompressed_buf,
-      block_sizes[block_ix], size);
-    assert (res > 0);
-    #endif
+    size_t res = ZSTD_decompressDCtx(decompressor,
+      uncompressed_buf, size,
+      &compressed_blocks[offset], block_sizes[block_ix]);
+    assert (!ZSTD_isError(res));
     return uncompressed_buf[ix_in_block];
   }
 
@@ -288,38 +234,16 @@ struct CompressedEGTB {
 
     #pragma omp parallel num_threads(nthreads)
     {
-      #ifdef LIBDEFLATE
-        libdeflate_decompressor* local_decompressor = libdeflate_alloc_decompressor();
-      #endif
-
       #pragma omp for schedule(static)
       for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
         uint64_t block_ix = start_ix / block_size;
         uint64_t offset = block_offsets[block_ix];
         uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
-        #ifdef LIBDEFLATE
-          libdeflate_result res = libdeflate_deflate_decompress(local_decompressor,
-            &compressed_blocks[offset], block_sizes[block_ix],
-            &TB[start_ix], size, NULL);
-          assert (res == 0);
-        #endif
-        #ifdef ZSTD
-          size_t res = ZSTD_decompress(
-            &TB[start_ix], size,
-            &compressed_blocks[offset], block_sizes[block_ix]);
-          assert (!ZSTD_isError(res));
-        #endif
-        #ifdef LZ4
-        int res = LZ4_decompress_safe(
-          (char*) &compressed_blocks[offset], (char*) &TB[start_ix],
-          block_sizes[block_ix], size);
-        assert (res > 0);
-        #endif
+        size_t res = ZSTD_decompress(
+          &TB[start_ix], size,
+          &compressed_blocks[offset], block_sizes[block_ix]);
+        assert (!ZSTD_isError(res));
       }
-
-      #ifdef LIBDEFLATE
-        libdeflate_free_decompressor(local_decompressor);
-      #endif
     }
 
     assert (compute_checksum(TB, num_pos, nthreads) == checksum);
@@ -334,15 +258,6 @@ int main_test(int argc, char *argv[]) {
   uint64_t compression_level = atoi(argv[2]);
   uint64_t block_size = atoi(argv[3]); // [4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152]
 
-  #ifdef LIBDEFLATE
-  std::cout << "LIBDEFLATE" << std::endl;
-  #endif
-  #ifdef ZSTD
-  std::cout << "ZSTD" << std::endl;
-  #endif
-  #ifdef LZ4
-  std::cout << "LZ4" << std::endl;
-  #endif
   std::cout << "n_threads: " << n_threads << ", compression_level: " << compression_level << ", block_size: " << block_size << std::endl;
   bool verbose = true;
   bool write = true;
@@ -420,15 +335,6 @@ int main_compress(int argc, char *argv[]) {
   uint64_t compression_level = atoi(argv[2]);
   uint64_t block_size = atoi(argv[3]);
 
-  #ifdef LIBDEFLATE
-  std::cout << "LIBDEFLATE" << std::endl;
-  #endif
-  #ifdef ZSTD
-  std::cout << "ZSTD" << std::endl;
-  #endif
-  #ifdef LZ4
-  std::cout << "LZ4" << std::endl;
-  #endif
   std::cout << "n_threads: " << n_threads << ", compression_level: " << compression_level << ", block_size: " << block_size << std::endl;
   bool verbose = true;
   bool write = true;
