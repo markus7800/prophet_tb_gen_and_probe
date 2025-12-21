@@ -10,13 +10,13 @@ lzstd = -I zstd/lib -L zstd/lib -lzstd
 
 fast:
 	$(CC) -g $(flags)  -c -o main.o main.cpp
-	g++ -g -o main bitboard.o main.o uci.o  $(flags)
+	g++ -g -o main.out bitboard.o main.o uci.o  $(flags)
 
 build:
 	$(CC) -g $(flags) -c -o bitboard.o bitboard.cpp
 	$(CC) -g $(flags) -c -o uci.o uci.cpp
 	$(CC) -g $(flags) -c -o main.o main.cpp
-	$(CC) -g -o main bitboard.o main.o uci.o $(flags)
+	$(CC) -g -o main.out bitboard.o main.o uci.o $(flags)
 
 mates:
 	$(CC) -g $(flags) -c -o bitboard.o bitboard.cpp
@@ -27,7 +27,8 @@ mates:
 	$(CC) -g $(flags) -c -o kkx.o kkx.cpp
 	$(CC) -g $(flags) -c -o uci.o uci.cpp
 	$(CC) -g $(flags) -c -o egtb.o egtb.cpp
-	$(CC) -g -o longest_mate longest_mate.cpp egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
+	$(CC) -g -o longest_mate.out longest_mate.cpp egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
+	$(CC) -g -o longest_mate_lines.out longest_mate_lines.cpp egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
 
 
 compress:

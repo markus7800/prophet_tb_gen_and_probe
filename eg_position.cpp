@@ -70,6 +70,53 @@ std::string EGPosition::fen() const {
     ss << (ep_square() == SQ_NONE ? " - " : " " + square_to_uci(ep_square()) + " ");
     return ss.str();
 }
+void EGPosition::from_fen(std::string fenStr) {
+    reset();
+
+    unsigned char      col, row, token;
+    size_t             idx;
+    Square             sq = SQ_A8;
+    std::istringstream ss(fenStr);
+
+    ss >> std::noskipws;
+
+    // 1. Piece placement
+    while ((ss >> token) && !isspace(token)) {
+        if (isdigit(token))
+            sq += (token - '0') * EAST;  // Advance the given number of files
+
+        else if (token == '/')
+            sq += 2 * SOUTH;
+
+        else if ((idx = PieceToChar.find(token)) != std::string::npos)
+        {
+            put_piece(Piece(idx), sq);
+            ++sq;
+        }
+    }
+
+    // 2. Active color
+    ss >> token;
+    sideToMove = (token == 'w' ? WHITE : BLACK);
+    ss >> token;
+
+    // 3. Not castling. 
+    while ((ss >> token) && !isspace(token)) {
+        token = char(toupper(token));
+        assert(token != 'K' && token != 'Q');
+
+    }
+
+    // 4. En passant square.
+    // Ignore if square is invalid or not on side to move relative rank 6.
+    epSquare = SQ_NONE;
+    if (((ss >> col) && (col >= 'a' && col <= 'h'))
+        && ((ss >> row) && (row == (sideToMove == WHITE ? '6' : '3'))))
+    {
+        epSquare = make_square(File(col - 'a'), Rank(row - '1'));
+        assert(check_ep(epSquare)); // only accept legal ep squares
+    }
+}
 
 bool EGPosition::check_ep(Square ep_sq) const {
     Color  us       = ~sideToMove;

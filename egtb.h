@@ -104,7 +104,7 @@ struct EGTB {
             exit(EXIT_FAILURE);
         }
     }
-    int16_t query_postion(EGPosition const &pos) {
+    int16_t query_postion(EGPosition const pos) {
         return this->get_value(this->ix_from_pos(pos));
     }
 

@@ -61,6 +61,7 @@ public:
     bool is_equal(const EGPosition& pos) const;
 
     std::string fen() const;
+    void from_fen(std::string fenStr);
 
     UndoInfo do_move(Move m);
     void undo_move(Move m, UndoInfo u);
