@@ -1,9 +1,52 @@
-#ifndef EGTB_ITERATOR_H_INCLUDED
-#define EGTB_ITERATOR_H_INCLUDED
+#include "egtb_ids.h"
 
-#include <vector>
-#include <unordered_set>
-#include "egtb.h"
+std::string get_pieces_identifier(int pieces[6]) {
+    std::ostringstream os;
+    os << "K";
+    for (PieceType pt = QUEEN; pt >= PAWN; --pt) {
+        for (int i = 0; i < pieces[pt]; i++) {
+            os << PieceToChar[pt];
+        }
+    }
+    return os.str();
+}
+
+std::string get_egtb_identifier(int stm_pieces[6], int sntm_pieces[6]) {
+    std::ostringstream os;
+    for (int* pieces: {stm_pieces, sntm_pieces}) {
+        os << get_pieces_identifier(pieces);
+    }
+    return os.str();
+}
+
+void egtb_id_to_pieces(std::string egtb_id, int pieces1[6], int pieces2[6]) {
+    for (int i = 0; i < 6; i++) {
+        pieces1[i] = 0;
+        pieces2[i] = 0;
+    }
+
+    int king_count = 0;
+    for (char c : egtb_id) {
+        int* pieces = king_count == 1 ? pieces1 : pieces2;
+        if (c == 'K') {
+            king_count++;
+        } else if (c == 'P') {
+            pieces[PAWN]++;
+        } else if (c == 'N') {
+            pieces[KNIGHT]++;
+        } else if (c == 'B') {
+            pieces[BISHOP]++;
+        } else if (c == 'R') {
+            pieces[ROOK]++;
+        } else if (c == 'Q') {
+            pieces[QUEEN]++;
+        } else {
+            std::cout << "Unknown piece " << c << std::endl;
+            exit(1);
+        }
+    }
+}
+
 
 void place_piece(Piece p, int* pieces1, int* pieces2) {
     int* pieces = color_of(p) == WHITE ? pieces1 : pieces2;
@@ -14,7 +57,7 @@ void unplace_piece(Piece p, int* pieces1, int* pieces2) {
     pieces[type_of(p)]--;
 }
 
-std::vector<std::string> get_egtb_identifiers(int MIN_PIECE_COUNT, int MAX_PIECE_COUNT, int MIN_PAWN_COUNT = 0, int MAX_PAWN_COUNT = 4) {
+std::vector<std::string> get_egtb_identifiers(int MIN_PIECE_COUNT, int MAX_PIECE_COUNT, int MIN_PAWN_COUNT, int MAX_PAWN_COUNT) {
     
     std::vector<int> pieces1(6);
     std::vector<int> pieces2(6);
@@ -64,4 +107,13 @@ std::vector<std::string> get_egtb_identifiers(int MIN_PIECE_COUNT, int MAX_PIECE
 
     return egtbs;
 }
-#endif
+
+
+std::unordered_map<std::string, int> EGTB_ID_TO_IX;
+void init_egtb_id_to_ix() {
+    int count = 0;
+    for (std::string egtb_id : get_egtb_identifiers(0,4)) {
+        count++;
+        EGTB_ID_TO_IX[egtb_id] = count;
+    }
+}

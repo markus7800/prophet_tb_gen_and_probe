@@ -4,7 +4,7 @@
 #include "values.h"
 #include "kkx.h"
 #include "triangular_indexes.h"
-#include "egtb_iterator.h"
+#include "egtb.h"
 #include "eg_movegen.h"
 #include <fstream>
 

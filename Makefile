@@ -26,9 +26,10 @@ mates:
 	$(CC) -g $(flags) -c -o triangular_indexes.o triangular_indexes.cpp
 	$(CC) -g $(flags) -c -o kkx.o kkx.cpp
 	$(CC) -g $(flags) -c -o uci.o uci.cpp
+	$(CC) -g $(flags) -c -o egtb_ids.o egtb_ids.cpp
 	$(CC) -g $(flags) -c -o egtb.o egtb.cpp
-	$(CC) -g -o longest_mate.out longest_mate.cpp egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
-	$(CC) -g -o longest_mate_lines.out longest_mate_lines.cpp egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
+	$(CC) -g -o longest_mate.out longest_mate.cpp egtb_ids.o egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
+	$(CC) -g -o longest_mate_lines.out longest_mate_lines.cpp egtb_ids.o egtb.o kkx.o linearize.o triangular_indexes.o eg_position.o eg_movegen.o bitboard.o uci.o  $(flags) $(lzstd) -DZSTD
 
 
 compress:

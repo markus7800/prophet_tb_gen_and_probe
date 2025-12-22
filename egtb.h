@@ -8,10 +8,7 @@
 #include "compressed_tb.h"
 #include "linearize.h"
 #include "types.h"
-
-std::string get_pieces_identifier(int pieces[6]);
-std::string get_egtb_identifier(int stm_pieces[6], int sntm_pieces[6]);
-void egtb_id_to_pieces(std::string egtb_id, int pieces1[6], int pieces2[6]);
+#include "egtb_ids.h"
 
 struct EGTB {
     std::string id;
@@ -94,11 +91,12 @@ struct EGTB {
         }
     }
 
+    // not thread-safe
     int16_t get_value(uint64_t ix) {
         if (loaded) {
             return this->TB[ix];
         } else if (compressed) {
-            return this->CTB->get(ix);
+            return this->CTB->get_value(ix);
         } else {
             perror(("Tried to get value on unloaded EGTB " + this->id).c_str());
             exit(EXIT_FAILURE);
@@ -106,6 +104,22 @@ struct EGTB {
     }
     int16_t query_postion(EGPosition const pos) {
         return this->get_value(this->ix_from_pos(pos));
+    }
+
+    // thread-safe
+    int16_t get_value_dctx(uint64_t ix, DecompressCtx* dctx) {
+        if (loaded) {
+            return this->TB[ix];
+        } else if (compressed) {
+            return this->CTB->get_value_dctx(ix, dctx);
+        } else {
+            perror(("Tried to get value on unloaded EGTB " + this->id).c_str());
+            exit(EXIT_FAILURE);
+        }
+    }
+    // thread-safe
+    int16_t query_postion_dctx(EGPosition const pos, DecompressCtx* dctx) {
+        return this->get_value_dctx(this->ix_from_pos(pos), dctx);
     }
 
     std::string get_folder(std::string root_folder) {
