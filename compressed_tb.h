@@ -15,8 +15,28 @@
 
 
 #define COMP_EXT ".bz"
+/*
+.bz FORMAT:
+
+HEADER 3 x UINT64 = 24 bytes
+checksum UINT64
+num_pos UINT64
+block_size UINT64
+
+BLOCK_SIZES
+if block_size > 65535:
+  n_blocks * UINT32
+else
+  n_blocks * UINT16
+where  n_blocks = ceil((double) num_pos / block_size);
+
+COMPRESSED DATA
+individual compressed blocks concatenated at byte level
+*/ 
+
 
 uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, int nthreads);
+uint64_t compress_egtb(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
 
 struct DecompressCtx {
   int egtb_ix;
@@ -165,7 +185,7 @@ struct CompressedTB {
       }
     }
 
-    // assert (compute_checksum(TB, num_pos, nthreads) == checksum);
+    assert (compute_checksum(TB, num_pos, nthreads) == checksum);
   }
 
   void decompress_to_file(std::string filename) {
@@ -190,9 +210,5 @@ struct CompressedTB {
     fclose(f);
   }
 };
-
-// uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, int nthreads);
-// uint64_t compress_egtb(std::string filename, int nthreads, int compression_level, uint64_t block_size, bool write, bool verbose);
-
 
 #endif
