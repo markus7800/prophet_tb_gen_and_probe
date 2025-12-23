@@ -191,6 +191,9 @@ int main(int argc, char *argv[]) {
 
 }
 
+// Loaded 1001 EGTBs (945GiB)
+// blocksize = 1048576
 // Finished in 312.912s. Query count =   757364 (0.413159ms/query)
+// Loaded 511 EGTBs (375GiB)
 // Finished in 6675.26s. Query count = 15767444 (0.423357ms/query) // double count
 // Finished in 441.334s. Query count = 7883722 (0.0559804ms/query) // multi threaded
