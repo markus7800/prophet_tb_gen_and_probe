@@ -25,6 +25,8 @@ void EGTB::store_egtb(std::string root_folder) {
 
 
 void EGTB::mmap_egtb_from_file(std::string root_folder) {
+    assert (!this->loaded);
+    assert (this->TB == nullptr);
     std::string filename = this->get_filename(root_folder);
     struct stat st;
     stat(filename.c_str(), &st);
@@ -49,6 +51,8 @@ void EGTB::mmap_egtb_from_file(std::string root_folder) {
 }
 
 void EGTB::load_egtb_from_file(std::string root_folder) {
+    assert (!this->loaded);
+    assert (this->TB == nullptr);
     std::string filename = this->get_filename(root_folder);
     this->TB = (int16_t*) calloc(this->num_pos, sizeof(int16_t));
     FILE *f = fopen(filename.c_str(), "rb");
@@ -62,17 +66,21 @@ void EGTB::load_egtb_from_file(std::string root_folder) {
 
 
 void EGTB::init_compressed_tb(std::string root_folder) {
-    assert(!this->compressed);
-    this->CTB = new CompressedTB(
-        EGTB_ID_TO_IX[this->id],
-        this->get_filename(root_folder) + COMP_EXT
-    );
-    this->compressed = true;
+    if (!this->compressed) {
+        assert (this->CTB == nullptr);
+        this->CTB = new CompressedTB(
+            EGTB_ID_TO_IX[this->id],
+            this->get_filename(root_folder) + COMP_EXT
+        );
+        this->compressed = true;
+    }
 }
 
 void EGTB::load_egtb_from_compressed_file(std::string root_folder, int nthreads) {
     if (!this->compressed) this->init_compressed_tb(root_folder);
     assert (this->CTB != nullptr);
+    assert (!this->loaded);
+    assert (this->TB == nullptr);
     this->TB = (int16_t*) calloc(this->num_pos, sizeof(int16_t));
     this->CTB->decompress_to_array(nthreads, TB);
     

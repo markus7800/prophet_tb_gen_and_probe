@@ -54,9 +54,6 @@ uint64_t compress_egtb(int16_t* TB, uint64_t num_pos, int nthreads, int compress
   final_size += sizeof(uint64_t); // num_pos
   final_size += sizeof(uint64_t); // block_size
 
-  if (verbose) std::cout << "final size: " << final_size << " " << (double) final_size / tb_size_bytes << " (large_blocks = " << large_blocks << ")" << std::endl;
-
-
   if (write) {
     FILE* f = fopen((compressed_filename + ".tmp").c_str(), "wb");
     if (f == NULL) {
@@ -85,6 +82,9 @@ uint64_t compress_egtb(int16_t* TB, uint64_t num_pos, int nthreads, int compress
     system(("mv " + compressed_filename + ".tmp " + compressed_filename).c_str());
     if (verbose) std::cout << "Wrote to " << compressed_filename << std::endl;
   }
+  
+  if (verbose) std::cout << "Compressed final size: " << final_size << " ratio: " << (double) final_size / tb_size_bytes << std::endl;
+
 
   free(block_sizes);
   return final_size;

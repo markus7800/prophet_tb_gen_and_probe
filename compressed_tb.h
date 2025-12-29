@@ -72,6 +72,7 @@ struct CompressedTB {
   DecompressCtx* decompress_ctx;
 
   CompressedTB(int egtb_ix_, std::string filename) {
+    // std::cout << "CompressedEGTB " << this << ": " << filename << std::endl;
     this->egtb_ix = egtb_ix_;
     this->compressed_filename = filename;
 
@@ -122,7 +123,7 @@ struct CompressedTB {
   }
 
   ~CompressedTB() {
-    // std::cout << "~CompressedEGTB" << this->egtb_id << std::endl;
+    // std::cout << "~CompressedEGTB " << this << ": " << this->compressed_filename << std::endl;
     int unmap = munmap(this->map_ptr, this->compressed_filesize);
     if (unmap == -1) {
         perror(("Error munmapping the file " + this->compressed_filename).c_str());

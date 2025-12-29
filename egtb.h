@@ -39,9 +39,7 @@ struct EGTB {
         init(stm_pieces_, sntm_pieces_);
     }
     ~EGTB() {
-        if (compressed && CTB != nullptr) {
-            delete CTB;
-        }
+        free_compressed_tb();
         assert (TB == nullptr);
     }
 
@@ -151,7 +149,14 @@ struct EGTB {
     void mmap_egtb_from_file(std::string root_folder);
     void load_egtb_from_file(std::string root_folder);
     void init_compressed_tb(std::string root_folder);
-    void load_egtb_from_compressed_file(std::string root_folder, int nthreads=1);
+    void free_compressed_tb() {
+        if (compressed && CTB != nullptr) {
+            delete CTB;
+            CTB = nullptr;
+            compressed = false;
+        }
+    }
+    void load_egtb_from_compressed_file(std::string root_folder, int nthreads);
     void free_tb();
 
     void maybe_decompress_and_mmap_egtb(std::string root_folder) {
@@ -163,7 +168,7 @@ struct EGTB {
         this->mmap_egtb_from_file(root_folder);
     }
 
-    void maybe_decompress_and_load_egtb(std::string root_folder, int nthreads=1) {
+    void maybe_decompress_and_load_egtb(std::string root_folder, int nthreads) {
         if (!this->exists_decompressed(root_folder)) {
             // can decompress directly to memory
             this->load_egtb_from_compressed_file(root_folder, nthreads);
