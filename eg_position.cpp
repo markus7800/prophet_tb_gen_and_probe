@@ -203,18 +203,18 @@ UndoInfo EGPosition::do_move(Move m) {
     }
 
 
-    return UndoInfo(type_of(captured), old_epSquare);
+    return UndoInfo(m, type_of(captured), old_epSquare);
 }
 
-void EGPosition::undo_move(Move m, UndoInfo u) {
-    Square from     = m.from_sq();
-    Square to       = m.to_sq();
+void EGPosition::undo_move(UndoInfo u) {
+    Square from     = u.move.from_sq();
+    Square to       = u.move.to_sq();
 
     sideToMove = ~sideToMove;
 
     Color  us       = sideToMove;
 
-    if (m.type_of() == PROMOTION) {
+    if (u.move.type_of() == PROMOTION) {
         remove_piece(to);
         put_piece(make_piece(us,PAWN), to);
     }
@@ -222,7 +222,7 @@ void EGPosition::undo_move(Move m, UndoInfo u) {
     epSquare = u.epSquare;
     if (u.captured) {
         Square capsq = to;
-        if (m.type_of() == EN_PASSANT) {
+        if (u.move.type_of() == EN_PASSANT) {
             capsq -= pawn_push(us);
         }
         put_piece(make_piece(~us, u.captured), capsq);

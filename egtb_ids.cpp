@@ -19,6 +19,15 @@ std::string get_egtb_identifier(int stm_pieces[6], int sntm_pieces[6]) {
     return os.str();
 }
 
+
+std::string get_mirror_id(const std::string& egtb_id) {
+    size_t firstK = egtb_id.find('K');
+    size_t secondK = egtb_id.find('K', firstK + 1);
+    std::string stuff1 = egtb_id.substr(firstK + 1, secondK - firstK - 1);
+    std::string stuff2 = egtb_id.substr(secondK + 1);
+    return "K" + stuff2 + "K" + stuff1;
+}
+
 void egtb_id_to_pieces(std::string egtb_id, int pieces1[6], int pieces2[6]) {
     for (int i = 0; i < 6; i++) {
         pieces1[i] = 0;

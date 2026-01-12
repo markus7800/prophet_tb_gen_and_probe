@@ -12,9 +12,12 @@
 
 
 struct UndoInfo {
+    Move move;
     PieceType captured;
     Square epSquare;
-    UndoInfo(PieceType captured_, Square epSquare_) {
+    UndoInfo() = default;
+    UndoInfo(Move move_, PieceType captured_, Square epSquare_){
+        this->move = move_;
         this->captured = captured_;
         this->epSquare = epSquare_;
     }
@@ -64,10 +67,10 @@ public:
     void from_fen(std::string fenStr);
 
     UndoInfo do_move(Move m);
-    void undo_move(Move m, UndoInfo u);
+    void undo_move(UndoInfo u);
 
-    void do_rev_move(Move m, UndoInfo u = UndoInfo(NO_PIECE_TYPE, SQ_NONE));
-    void undo_rev_move(Move m);
+    void do_rev_move(UndoInfo u);
+    void undo_rev_move(UndoInfo u);
 
     // int& get_wpiece_count() const;
     // int* get_bpiece_count() const;
@@ -153,12 +156,12 @@ inline Bitboard EGPosition::ep_candidates() const {
         return shift<SOUTH>(pieces(WHITE, PAWN) & Rank4BB) & ~pieces();
 }
 
-inline void EGPosition::do_rev_move(Move m, UndoInfo u) {
-    undo_move(m, u);
+inline void EGPosition::do_rev_move(UndoInfo u) {
+    undo_move(u);
 }
 
-inline void EGPosition::undo_rev_move(Move m) {
-    do_move(m);
+inline void EGPosition::undo_rev_move(UndoInfo u) {
+    do_move(u.move);
 }
 
 inline Color EGPosition::side_to_move() const { return sideToMove; }

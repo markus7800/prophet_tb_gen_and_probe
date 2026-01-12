@@ -57,7 +57,7 @@ void recompress_files(std::string path, uint64_t n_threads, uint64_t compression
     if (ctb.block_size != block_size) {
       int16_t* TB = (int16_t*) malloc(size);
       ctb.decompress_to_array(n_threads, TB);
-      compressed_size = compress_egtb(TB, ctb.num_pos, n_threads, compression_level, block_size, filename + COMP_EXT, write, verbose);
+      compressed_size = block_compress_TB(TB, ctb.num_pos, n_threads, compression_level, block_size, filename + COMP_EXT, write, verbose);
       free(TB);
     } else {
       compressed_size = ctb.compressed_filesize;

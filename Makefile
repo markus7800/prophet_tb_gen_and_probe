@@ -6,13 +6,15 @@
 
 CC = g++
 flags = -std=c++17 -Wall -Wcast-qual -Wno-unused-command-line-argument -fno-exceptions -pedantic -Wextra -Wshadow -m64 -flto=auto -funroll-loops -DIS_64BIT -DUSE_POPCNT -O3
-lzstd = -I zstd/lib  -L zstd/lib -lzstd
+lzstd = -I zstd/lib -L zstd/lib -lzstd
 
 ifdef OMP
 	flags += -fopenmp -DOMP
+else
+	flags += -Wno-unknown-pragmas
 endif
-ifdef MBI2
-	flags += -mbmi2 -DUSE_BMI_EXT
+ifdef PDEP
+	flags += -mbmi2 -DPDEP
 endif
 
 prophet: flags += -fPIC
@@ -40,8 +42,10 @@ compress:
 	$(CC) -g $(flags) -o compress_files.out compress_files.cpp $(corefiles) $(lzstd)
 
 prophet: lib
-	$(CC) -g $(flags) -shared -o libprophet.so prophet.cpp $(corefiles) $(lzstd)
+	$(CC) -g $(flags) -shared -o build/libprophet.so prophet.cpp $(corefiles) $(lzstd)
+
+lprophet = -I . -L build -lprophet -Wl,-rpath,'$$ORIGIN/build'
 
 mates:
-	$(CC) -g $(flags) -o longest_mate.out longest_mate.cpp $(corefiles) $(lzstd)
-	$(CC) -g $(flags) -o longest_mate_lines.out longest_mate_lines.cpp $(corefiles) $(lzstd)
+	$(CC) -g $(flags) -o longest_mate.out longest_mate.cpp $(lprophet) $(lzstd)
+	$(CC) -g $(flags) -o longest_mate_lines.out longest_mate_lines.cpp $(lprophet) $(lzstd)

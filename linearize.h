@@ -9,7 +9,7 @@
 
 void compute_poscounts(const int stm_pieces[6], const int sntm_pieces[6], uint64_t kntm_poscounts[], uint64_t& num_nonep_pos, uint64_t& num_ep_pos, uint64_t& num_pos);
 
-void pos_at_ix_(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6], const int bpieces[6], const uint64_t kntm_poscounts[]);
+void pos_at_ix_(EGPosition &pos, uint64_t ix, Color stm, const int stm_pieces[6], const int sntm_pieces[6], const uint64_t kntm_poscounts[]);
 
 uint64_t ix_from_pos_(EGPosition const &pos, const uint64_t kntm_poscounts[]);
 

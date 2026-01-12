@@ -94,3 +94,27 @@ KKQRRR: PREV CORRUPT: 72179884: -998
 
 zstd bfd8ad8
 but since the nnothing really changed in the source except github workflows
+
+
+
+// blocksize = 1048576
+// Loaded 1001 EGTBs (945GiB)
+// Finished in 312.912s. Query count =   757364 (0.413159ms/query)
+// Loaded 511 EGTBs (375GiB)
+// Finished in 6675.26s. Query count = 15767444 (0.423357ms/query) // double count
+// Finished in 441.334s. Query count = 7883722 (0.0559804ms/query) // multi threaded
+
+// blocksize = 32768
+//  ./longest_mate_lines.out 1
+// Loaded 1001 EGTBs (1110GiB)
+// Finished in 53.596s. Query count = 757364 (0.0707665ms/query)
+// ./longest_mate_lines.out 32
+// Loaded 1001 EGTBs (1110GiB)
+// Finished in 2.781s. Query count = 757364 (0.00367195ms/query)
+
+//  ./longest_mate_lines.out 1
+// Loaded 511 EGTBs (448GiB)
+// Finished in 254.324s. Query count = 7903032 (0.0321806ms/query)
+// ./longest_mate_lines.out 32
+// Loaded 511 EGTBs (448GiB)
+// Finished in 33.155s. Query count = 7903032 (0.00419523ms/query)

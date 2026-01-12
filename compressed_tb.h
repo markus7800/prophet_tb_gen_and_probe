@@ -46,12 +46,14 @@ struct DecompressCtx {
   uint64_t buf_size;
   int16_t* uncompressed_buf;
   ZSTD_DCtx* decompressor;
+  uint64_t probe_count;
   DecompressCtx(uint64_t buf_size_ = 2097152) {
     egtb_ix = 1001;
     uncompressed_block_ix = UINT64_MAX;
     buf_size = buf_size_;
     uncompressed_buf = (int16_t*) malloc(buf_size * sizeof(int16_t));
     decompressor = ZSTD_createDCtx();
+    probe_count = 0;
   }
   ~DecompressCtx() {
     free(uncompressed_buf);
@@ -148,6 +150,7 @@ struct CompressedTB {
   // thread-safe
   int16_t get_value_dctx(uint64_t ix, DecompressCtx* dctx) {
     assert (dctx->buf_size >= block_size);
+    dctx->probe_count++;
 
     uint64_t block_ix = ix / block_size;
     uint64_t ix_in_block = ix % block_size;

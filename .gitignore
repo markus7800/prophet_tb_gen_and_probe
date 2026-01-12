@@ -1,4 +1,5 @@
 *.o
+*.so
 main
 main_egtb
 tmp.txt

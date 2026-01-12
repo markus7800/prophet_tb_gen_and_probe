@@ -323,7 +323,7 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
 
     int16_t max_val = LOSS_IN(0);
     int16_t val;
-    EGMoveList movelist = EGMoveList<FORWARD>(pos);
+    EGMoveList movelist = EGMoveList(pos);
     for (Move move : movelist) {
         UndoInfo u = pos.do_move(move);
         PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
@@ -337,7 +337,7 @@ void GenEGTB::check_consistency(EGPosition &pos, bool verbose) {
         }
         max_val = std::max(max_val, (int16_t) -val);
 
-        pos.undo_move(move, u);
+        pos.undo_move(u);
     }
     if (movelist.size() == 0) {
         if (pos.stm_in_check()) {
@@ -389,7 +389,7 @@ void GenEGTB::check_consistency_allocated(int nthreads) {
                 continue;
             }
 
-            EGMoveList movelist = EGMoveList<FORWARD>(pos);
+            EGMoveList movelist = EGMoveList(pos);
             if (movelist.size() == 0) {
                 if (pos.stm_in_check()) {
                     assert(tb_val == LOSS_IN(0));
@@ -406,7 +406,7 @@ void GenEGTB::check_consistency_allocated(int nthreads) {
                     EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
                     uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
                     max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
-                    pos.undo_move(move, u);
+                    pos.undo_move(u);
                 }
 
                 if (max_val > 0) max_val--;
@@ -510,7 +510,7 @@ void GenEGTB::check_consistency_max_bytes_allocated(int nthreads, uint64_t max_b
                         continue;
                     }
                     
-                    EGMoveList movelist = EGMoveList<FORWARD>(pos);
+                    EGMoveList movelist = EGMoveList(pos);
                     if (movelist.size() == 0) {
                         if (pos.stm_in_check()) {
                             assert(tb_val == LOSS_IN(0));
@@ -529,7 +529,7 @@ void GenEGTB::check_consistency_max_bytes_allocated(int nthreads, uint64_t max_b
                                 uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
                                 max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
                             }
-                            pos.undo_move(move, u);
+                            pos.undo_move(u);
                         }
 
                         if (max_val > 0) max_val--;
@@ -573,7 +573,7 @@ void GenEGTB::check_consistency_max_bytes_allocated(int nthreads, uint64_t max_b
                             pos.reset();
                             LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
                             std::cout << "INCONSISTENCY: Did not obtain max " << LOSS_EGTB->TB[ix] <<  " at " << ix << ":\n" << pos << pos.fen() << std::endl;
-                            for (Move move: EGMoveList<FORWARD>(pos)) std::cout << move_to_uci(move) << " ";
+                            for (Move move: EGMoveList(pos)) std::cout << move_to_uci(move) << " ";
                             std::cout << std::endl;
                         }
                     }
@@ -693,30 +693,16 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
                         transformed_pos.reset();
                         transform_to(pos, transformed_pos, H_FLIPS[t], V_FLIPS[t], SWAPS[t]);
 
-                        for (Move move : EGMoveList<REVERSE>(transformed_pos, capture_pt, promote_pt)) {
-                            transformed_pos.do_rev_move(move, UndoInfo(capture_pt,SQ_NONE));
+                        for (UndoInfo rev_move : EGUndoInfoList(transformed_pos, capture_pt, promote_pt)) {
+                            transformed_pos.do_rev_move(rev_move);
                             uint64_t egbt_ix = egtb->ix_from_pos(transformed_pos);
 
                             // collisions should be very rare (e.g. two pawns that can promote)
                             #pragma omp atomic compare
                             if (egtb->TB[egbt_ix] < lb) { egtb->TB[egbt_ix] = lb; }
                             // if egtb->TB[egbt_ix] is unset (==0), then 0 < VAL_TO_LOWERBOUND(LOSS_IN(0))
-                            
-                            if (egtb->num_ep_pos > 0 && transformed_pos.ep_square() == SQ_NONE) {
-                                Bitboard ep_candiates = transformed_pos.ep_candidates();
-                                while (ep_candiates) {
-                                    Square ep_sq = pop_lsb(ep_candiates);
-                                    if (transformed_pos.check_ep(ep_sq)) {
-                                        transformed_pos.set_ep_square(ep_sq);
-                                        uint64_t ep_win_ix = egtb->ix_from_pos(transformed_pos);
-                                        #pragma omp atomic compare
-                                        if (egtb->TB[ep_win_ix] < lb) { egtb->TB[ep_win_ix] = lb; }
-                                        transformed_pos.set_ep_square(SQ_NONE);
-                                    }
-                                }
-                            }
 
-                            transformed_pos.undo_rev_move(move);
+                            transformed_pos.undo_rev_move(rev_move);
                         }
 
                     }
@@ -820,7 +806,7 @@ void GenEGTB::gen(int nthreads) {
                 LOSS_EGTB->TB[ix] = UNKNOWN;
             }
 
-            EGMoveList movelist = EGMoveList<FORWARD>(pos);
+            EGMoveList movelist = EGMoveList(pos);
             if (movelist.size() == 0) {
                 if (pos.stm_in_check()) {
                     LOSS_EGTB->TB[ix] = LOSS_IN(0);
@@ -854,7 +840,7 @@ void GenEGTB::gen(int nthreads) {
                             max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
                         } // otherwise we must have lower bound from retrograde_promotion_tbs
                     }
-                    pos.undo_move(move, u);
+                    pos.undo_move(u);
                 }
 
                 // either has_full_eval or has_partial_eval since we have at least one move
@@ -932,27 +918,13 @@ void GenEGTB::gen(int nthreads) {
                     LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
                     assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
 
-                    for (Move move : EGMoveList<REVERSE>(pos)) {
-                        pos.do_rev_move(move);
+                    for (UndoInfo rev_move : EGUndoInfoList(pos)) {
+                        pos.do_rev_move(rev_move);
                         uint64_t win_ix = WIN_EGTB->ix_from_pos(pos);
                         if (!IS_SET(WIN_EGTB->TB[win_ix]) || WIN_EGTB->TB[win_ix] < WIN_IN(LEVEL) ) {
                             WIN_EGTB->TB[win_ix] = WIN_IN(LEVEL);
                         }
-                        if (WIN_EGTB->num_ep_pos > 0 && pos.ep_square() == SQ_NONE) {
-                            Bitboard ep_candiates = pos.ep_candidates();
-                            while (ep_candiates) {
-                                Square ep_sq = pop_lsb(ep_candiates);
-                                if (pos.check_ep(ep_sq)) {
-                                    pos.set_ep_square(ep_sq);
-                                    uint64_t ep_win_ix = WIN_EGTB->ix_from_pos(pos);
-                                    if (!IS_SET(WIN_EGTB->TB[ep_win_ix]) || WIN_EGTB->TB[ep_win_ix] < WIN_IN(LEVEL) ) {
-                                        WIN_EGTB->TB[ep_win_ix] = WIN_IN(LEVEL);
-                                    }
-                                    pos.set_ep_square(SQ_NONE);
-                                }
-                            }
-                        }
-                        pos.undo_rev_move(move);
+                        pos.undo_rev_move(rev_move);
                     }
                 }
             }
@@ -968,8 +940,8 @@ void GenEGTB::gen(int nthreads) {
                     assert (WIN_EGTB->pos_ix_is_used(pos,win_ix));
                     N_LEVEL_POS++;
 
-                    for (Move move : EGMoveList<REVERSE>(pos)) {
-                        pos.do_rev_move(move);
+                    for (UndoInfo rev_move : EGUndoInfoList(pos)) {
+                        pos.do_rev_move(rev_move);
                         uint64_t maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
                         if (!IS_SET(LOSS_EGTB->TB[maybe_loss_ix])) {
                             if (LOSS_EGTB->TB[maybe_loss_ix] == UNKNOWN) {
@@ -985,25 +957,8 @@ void GenEGTB::gen(int nthreads) {
                                 // SOME_LEVEL < LEVEL + 1 cannot happen as all such positions had to be considered previous iterations
                             }
                         }
-                        if (LOSS_EGTB->num_ep_pos > 0 && pos.ep_square() == SQ_NONE) {
-                            Bitboard ep_candiates = pos.ep_candidates();
-                            while (ep_candiates) {
-                                Square ep_sq = pop_lsb(ep_candiates);
-                                if (pos.check_ep(ep_sq)) {
-                                    pos.set_ep_square(ep_sq);
-                                    uint64_t ep_maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
-                                    if (!IS_SET(LOSS_EGTB->TB[ep_maybe_loss_ix])) {
-                                        if (LOSS_EGTB->TB[ep_maybe_loss_ix] == UNKNOWN) {
-                                            LOSS_EGTB->TB[ep_maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
-                                        } else {
-                                            assert(LOSS_EGTB->TB[ep_maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1);
-                                        }
-                                    }
-                                    pos.set_ep_square(SQ_NONE);
-                                }
-                            }
-                        }
-                        pos.undo_rev_move(move);
+                        
+                        pos.undo_rev_move(rev_move);
                     }
                 }
             }            
@@ -1037,7 +992,7 @@ void GenEGTB::gen(int nthreads) {
                     assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
 
                     // check that all forward moves lead to checkmate in <= -(LEVEL-1)
-                    EGMoveList moveList = EGMoveList<FORWARD>(pos);
+                    EGMoveList moveList = EGMoveList(pos);
                     int16_t max_val = LOSS_IN(LEVEL-1); // there is at least one move that leads to WIN_IN(LEVEL-1)
                     if (moveList.size() == 0) {
                         max_val = 0; // has to be stale mate
@@ -1059,7 +1014,7 @@ void GenEGTB::gen(int nthreads) {
                                 }
                             }
 
-                            pos.undo_move(move, u);
+                            pos.undo_move(u);
                             
                             if (max_val > LOSS_IN(LEVEL-1)) { break; }
                         }

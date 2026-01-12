@@ -62,11 +62,7 @@ struct EGTB {
 
     void pos_at_ix(EGPosition &pos, uint64_t ix, Color stm) {
         assert (ix < this->num_pos);
-        if (stm == WHITE) {
-            pos_at_ix_(pos, ix, stm, this->stm_pieces, this->sntm_pieces, this->kntm_poscounts);
-        } else {
-            pos_at_ix_(pos, ix, stm, this->sntm_pieces, this->stm_pieces, this->kntm_poscounts);
-        }
+        pos_at_ix_(pos, ix, stm, this->stm_pieces, this->sntm_pieces, this->kntm_poscounts);
     }
 
     uint64_t ix_from_pos(EGPosition const &pos) {

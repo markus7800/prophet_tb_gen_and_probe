@@ -151,10 +151,7 @@ Move* generate_all_fwd(const EGPosition& pos, Move* moveList, Bitboard checkers)
 }
 
 
-template<>
-Move* generate<FORWARD>(const EGPosition& pos, Move* moveList, PieceType captured, PieceType promotion) {
-    assert(!captured);
-    assert(!promotion);
+Move* generate_forward(const EGPosition& pos, Move* moveList) {
     Color    us     = pos.side_to_move();
     Bitboard pinned = pos.blockers_for_king(us) & pos.pieces(us);
     Square   ksq    = pos.square<KING>(us);
@@ -280,8 +277,7 @@ Bitboard attackers_to_after_moving_piece(Square s, Bitboard byTypeBB[PIECE_TYPE_
          | (attacks_bb<KNIGHT>(s) & byTypeBB[KNIGHT]) | (attacks_bb<KING>(s) & byTypeBB[KING]);
 }
 
-template<>
-Move* generate<REVERSE>(const EGPosition& pos, Move* moveList, PieceType captured, PieceType promotion) {
+Move* generate_reverse(const EGPosition& pos, Move* moveList, PieceType captured, PieceType promotion) {
 
     Color    us     = ~pos.side_to_move();
     Move*    cur    = moveList;

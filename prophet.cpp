@@ -2,9 +2,6 @@
 #include "bitboard.h"
 #include "kkx.h"
 #include "triangular_indexes.h"
-#include "egtb.h"
-#include "egtb_ids.h"
-#include "eg_movegen.h"
 
 std::unordered_map<std::string, EGTB*> id_to_egtb = {};
 
@@ -20,15 +17,7 @@ std::string egtb_id_from_pos(const EGPosition pos) {
     return os.str();
 }
 
-std::string get_mirror_id(const std::string& egtb_id) {
-    size_t firstK = egtb_id.find('K');
-    size_t secondK = egtb_id.find('K', firstK + 1);
-    std::string stuff1 = egtb_id.substr(firstK + 1, secondK - firstK - 1);
-    std::string stuff2 = egtb_id.substr(secondK + 1);
-    return "K" + stuff2 + "K" + stuff1;
-}
-
-int16_t query_position(EGPosition pos, DecompressCtx* dctx) {
+int16_t probe_position_dctx(EGPosition pos, DecompressCtx* dctx) {
     std::string egtb_id = egtb_id_from_pos(pos);
 
     if (id_to_egtb[egtb_id] != nullptr) {
@@ -45,7 +34,7 @@ int16_t query_position(EGPosition pos, DecompressCtx* dctx) {
         int16_t max_val = LOSS_IN(0);
         for (Move move : movelist) {
             UndoInfo u = pos.do_move(move);
-            int16_t val = query_position(pos, dctx);
+            int16_t val = probe_position_dctx(pos, dctx);
             max_val = std::max(max_val, (int16_t) -val);
             pos.undo_move(move, u);
         }
@@ -55,6 +44,12 @@ int16_t query_position(EGPosition pos, DecompressCtx* dctx) {
     }
 }
 
+int16_t probe_position(EGPosition pos) {
+    DecompressCtx* dctx = new DecompressCtx(32768);
+    int16_t val = probe_position_dctx(pos, dctx);
+    delete dctx;
+    return val;
+}
 
 void init_prophet_tb(std::string path) {
     Bitboards::init();
@@ -64,21 +59,23 @@ void init_prophet_tb(std::string path) {
     init_egtb_id_to_ix();
 
     int count = 0;
-    for (std::string egtb_id : get_egtb_identifiers(0, 4)) {
+    uint64_t compressed_filesize = 0;
+    for (std::string egtb_id : get_egtb_identifiers()) {
         EGTB* egtb = new EGTB(egtb_id);
         if (egtb->exists(path)) {
             egtb->init_compressed_tb(path);
+            compressed_filesize += egtb->CTB->compressed_filesize;
             id_to_egtb[egtb_id] = egtb;
             count++;
         } else {
             delete egtb;
         }
     }
-    std::cout << "Init ProphetTB: Loaded " << count << " tables." << std::endl;
+    std::cout << "Init ProphetTB: Loaded " << count << " tables (" << (int) ceil((double) compressed_filesize / (1024*1024*1024)) << "GiB)" << std::endl;
 }
 
 void deinit_prophet_tb() {
-    for (std::string egtb_id : get_egtb_identifiers(0, 4)) {
+    for (std::string egtb_id : get_egtb_identifiers()) {
         delete id_to_egtb[egtb_id];
         id_to_egtb[egtb_id] = nullptr;
     }
@@ -96,7 +93,7 @@ int16_t probe_dctx(Piece pieces[6], Square squares[6], DecompressCtx* dctx) {
             pos.put_piece(pieces[i], squares[i]);
         }
     }
-    return query_position(pos, dctx);
+    return probe_position_dctx(pos, dctx);
 }
 
 

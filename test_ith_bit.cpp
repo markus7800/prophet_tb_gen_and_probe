@@ -1,14 +1,20 @@
 #include <cassert>
 #include <cstdint>
-#include <x86intrin.h>
+#include <iostream>
 
-inline uint64_t nthset(uint64_t x, unsigned n) {
-    return _pdep_u64(1ULL << n, x);
-}
-
-inline uint64_t nthunset(uint64_t x, unsigned n) {
-    return _pdep_u64(1ULL << n, ~x);
-}
+#ifdef BMI2
+    #include <x86intrin.h>
+    inline uint64_t nthset(uint64_t x, unsigned n) {
+        return _pdep_u64(1ULL << n, x);
+    }
+#else
+    inline uint64_t nthset(uint64_t x, int n) {
+        while (0 < n--)
+            x &= x - 1;
+        // std::cout << x << std::endl;
+        return x & -x;
+    }
+#endif
 
 int main() {
     assert(nthset(0b0000'1101'1000'0100'1100'1000'1010'0000, 0) ==
@@ -23,3 +29,6 @@ int main() {
                   0b0000'0000'0000'0000'0000'0000'0000'0000);
 
 }
+
+// g++ test_ith_bit.cpp -o test_ith_bit.out -DBMI2 -mbmi2
+// g++ test_ith_bit.cpp -o test_ith_bit.out

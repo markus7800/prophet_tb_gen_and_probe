@@ -86,8 +86,8 @@ void compute_poscounts(const int stm_pieces[6], const int sntm_pieces[6], uint64
 }
 
 
-void pos_at_ix_(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6], const int bpieces[6], const uint64_t kntm_poscounts[]) {
-    bool no_pawns = (wpieces[PAWN] + bpieces[PAWN] == 0);
+void pos_at_ix_(EGPosition &pos, uint64_t ix, Color stm, const int stm_pieces[6], const int sntm_pieces[6], const uint64_t kntm_poscounts[]) {
+    bool no_pawns = (stm_pieces[PAWN] + sntm_pieces[PAWN] == 0);
     pos.set_side_to_move(stm);
     int8_t bptm_flip = !no_pawns && (stm == BLACK) ? 56 : 0; // black pawn to move flip
 
@@ -167,7 +167,7 @@ void pos_at_ix_(EGPosition &pos, uint64_t ix, Color stm, const int wpieces[6], c
             n_occupied_sqs += 2;
         }
 
-        const int* c_pieces = (c == WHITE) ? wpieces : bpieces;
+        const int* c_pieces = (c == stm) ? stm_pieces : sntm_pieces;
         int piece_count = c_pieces[pt] - (EP && (pt == PAWN));  // if EP already placed one pawn for each side
         if (piece_count == 0) { continue; }
         Piece pc = make_piece(c, pt);
