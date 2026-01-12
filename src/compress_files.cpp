@@ -6,7 +6,6 @@
 #include "misc.h"
 #include <filesystem>
 namespace fs = std::filesystem;
-#include <openssl/md5.h>
 
 void load_file(std::string filename, int16_t*& TB, u_int64_t& num_pos, bool verbose) {
   // load file
@@ -106,6 +105,8 @@ void recompress_files(std::string path, uint64_t n_threads, uint64_t compression
   }
 }
 
+/*
+#include <openssl/md5.h>
 void run_md5(std::string path) {
   for (const auto & entry : fs::recursive_directory_iterator(path)) {
     if (entry.path().extension() != COMP_EXT) continue;
@@ -117,6 +118,7 @@ void run_md5(std::string path) {
     run_cmd("rm " + filename);
   }
 }
+*/
 
 int main(int argc, char *argv[]) {
   std::string path = "egtbs";
@@ -134,6 +136,6 @@ int main(int argc, char *argv[]) {
 
   recompress_files(path, n_threads, compression_level, block_size, verbose, write, bench);
 
-  run_md5(path);
+  // run_md5(path);
 
 }

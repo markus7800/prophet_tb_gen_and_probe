@@ -16,10 +16,10 @@ std::vector<Move> get_mate_line(EGPosition pos, DecompressCtx* dctx) {
         if (val > 0) val++;
         if (val < 0) val--;
         bool found = false;
-        for (Move move : EGMoveList<FORWARD>(pos)) {
+        for (Move move : EGMoveList(pos)) {
             UndoInfo u = pos.do_move(move);
             int16_t move_val = probe_position_dctx(pos, dctx);
-            pos.undo_move(move, u);
+            pos.undo_move(u);
             if (move_val == val) {
                 pv.push_back(move);
                 pos.do_move(move);

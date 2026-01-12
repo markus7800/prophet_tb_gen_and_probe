@@ -22,30 +22,30 @@ prophet: flags += -fPIC
 .PHONY: lib gen mates compress prophet
 
 lib:
-	$(CC) -g $(flags) -c -o bitboard.o bitboard.cpp
-	$(CC) -g $(flags) -c -o compressed_tb.o compressed_tb.cpp $(lzstd)
-	$(CC) -g $(flags) -c -o eg_movegen.o eg_movegen.cpp
-	$(CC) -g $(flags) -c -o eg_position.o eg_position.cpp
-	$(CC) -g $(flags) -c -o egtb.o egtb.cpp $(lzstd)
-	$(CC) -g $(flags) -c -o egtb_ids.o egtb_ids.cpp
-	$(CC) -g $(flags) -c -o kkx.o kkx.cpp
-	$(CC) -g $(flags) -c -o linearize.o linearize.cpp
-	$(CC) -g $(flags) -c -o triangular_indexes.o triangular_indexes.cpp
-	$(CC) -g $(flags) -c -o uci.o uci.cpp
+	$(CC) -g $(flags) -c -o build/bitboard.o src/bitboard.cpp
+	$(CC) -g $(flags) -c -o build/compressed_tb.o src/compressed_tb.cpp $(lzstd)
+	$(CC) -g $(flags) -c -o build/eg_movegen.o src/eg_movegen.cpp
+	$(CC) -g $(flags) -c -o build/eg_position.o src/eg_position.cpp
+	$(CC) -g $(flags) -c -o build/egtb.o src/egtb.cpp $(lzstd)
+	$(CC) -g $(flags) -c -o build/egtb_ids.o src/egtb_ids.cpp
+	$(CC) -g $(flags) -c -o build/kkx.o src/kkx.cpp
+	$(CC) -g $(flags) -c -o build/linearize.o src/linearize.cpp
+	$(CC) -g $(flags) -c -o build/triangular_indexes.o src/triangular_indexes.cpp
+	$(CC) -g $(flags) -c -o build/uci.o src/uci.cpp
 
-corefiles = bitboard.o compressed_tb.o eg_movegen.o eg_position.o egtb.o egtb_ids.o kkx.o linearize.o triangular_indexes.o uci.o
+corefiles = build/bitboard.o build/compressed_tb.o build/eg_movegen.o build/eg_position.o build/egtb.o build/egtb_ids.o build/kkx.o build/linearize.o build/triangular_indexes.o build/uci.o
 
 gen:
-	$(CC) -g $(flags)  -o gen_main.out gen_main.cpp $(corefiles) $(lzstd)
+	$(CC) -g $(flags)  -o build/gen_main.out src/gen_main.cpp $(corefiles) $(lzstd)
 
 compress:
-	$(CC) -g $(flags) -o compress_files.out compress_files.cpp $(corefiles) $(lzstd)
+	$(CC) -g $(flags) -o build/compress_files.out src/compress_files.cpp $(corefiles) $(lzstd)
 
 prophet: lib
-	$(CC) -g $(flags) -shared -o build/libprophet.so prophet.cpp $(corefiles) $(lzstd)
+	$(CC) -g $(flags) -shared -o build/libprophet.so src/prophet.cpp $(corefiles) $(lzstd)
 
-lprophet = -I . -L build -lprophet -Wl,-rpath,'$$ORIGIN/build'
+lprophet = -I src -L build -lprophet -Wl,-rpath,'$$ORIGIN/build'
 
 mates:
-	$(CC) -g $(flags) -o longest_mate.out longest_mate.cpp $(lprophet) $(lzstd)
-	$(CC) -g $(flags) -o longest_mate_lines.out longest_mate_lines.cpp $(lprophet) $(lzstd)
+	$(CC) -g $(flags) -o build/longest_mate.out src/longest_mate.cpp $(lprophet) $(lzstd)
+	$(CC) -g $(flags) -o build/longest_mate_lines.out src/longest_mate_lines.cpp $(lprophet) $(lzstd)

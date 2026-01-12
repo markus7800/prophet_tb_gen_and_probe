@@ -20,3 +20,4 @@ compress/zstd/*
 compress/lz4/*
 !compress/lz4/lib/lz4.h
 egtbs/*
+build/*

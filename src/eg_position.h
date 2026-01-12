@@ -1,4 +1,3 @@
-
 #ifndef EG_POSITION_H_INCLUDED
 #define EG_POSITION_H_INCLUDED
 

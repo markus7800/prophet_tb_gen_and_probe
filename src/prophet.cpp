@@ -23,7 +23,7 @@ int16_t probe_position_dctx(EGPosition pos, DecompressCtx* dctx) {
     if (id_to_egtb[egtb_id] != nullptr) {
         return id_to_egtb[egtb_id]->query_postion_dctx(pos, dctx);
     } else {
-        EGMoveList movelist = EGMoveList<FORWARD>(pos);
+        EGMoveList movelist = EGMoveList(pos);
         if (movelist.size() == 0) {
             if (pos.stm_in_check()) {
                 return LOSS_IN(0);
@@ -36,7 +36,7 @@ int16_t probe_position_dctx(EGPosition pos, DecompressCtx* dctx) {
             UndoInfo u = pos.do_move(move);
             int16_t val = probe_position_dctx(pos, dctx);
             max_val = std::max(max_val, (int16_t) -val);
-            pos.undo_move(move, u);
+            pos.undo_move(u);
         }
         if (max_val > 0) max_val--;
         if (max_val < 0) max_val++;
