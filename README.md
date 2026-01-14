@@ -58,7 +58,6 @@ On my 32 thread system, 4-men takes <1 minute and 5-men takes <2 hours to comput
 To be announced.
 
 If you have downloaded files you can check their integrity with
-
 ```
 make prophet
 make check
@@ -92,4 +91,4 @@ You have to organise your (sub-)set of tables as shown in the following section.
 1.1T    egtbs
 ```
 
-For more details see [prophet-tb.com](prophet-tb.com).
+For more details see [prophet-tb.com](https://prophet-tb.com/).
