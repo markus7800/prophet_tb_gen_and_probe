@@ -31,7 +31,8 @@ Then, run
 ```
 make prophet
 ```
-to build the shard library `build/prophet.so` used for probing.
+to build the shard library `build/prophet.so` used for probing.  
+The header file is `src/prophet.h`.
 
 For a demo, build
 ```
@@ -40,7 +41,8 @@ make mates OMP=1
 and run `build/longest_mates.out [folder] [max_npieces] [threads] [lines]` which finds the longest forced mate for each piece configuration up to `[max_npieces] = 0 | 1 | 2 | 3 | 4` pieces with `[threads]` number of threads.  
 `[folder]` is the directory you have your tables stored in.   
 By setting `[lines]` to `1` instead of `0`, it also finds the forced move sequence.  
-If you do not have OpenMP installed, omit `OMP=1` and use `[threads] = 1`
+If you do not have OpenMP installed, omit `OMP=1` and use `[threads] = 1`.  
+The source file is `src/longest_mates.cpp`.
 
 For generating the tablebase, build
 ```

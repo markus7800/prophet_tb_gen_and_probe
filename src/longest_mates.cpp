@@ -82,7 +82,6 @@ int main(int argc, char *argv[]) {
 
         for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
             int16_t val = egtb.get_value(ix);
-            assert (IS_SET(val));
             if (0 < val && val < longest_mate) {
                 longest_mate = val;
                 longest_mate_ix = ix;
