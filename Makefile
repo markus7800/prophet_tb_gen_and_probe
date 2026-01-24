@@ -51,3 +51,6 @@ check:
 
 mates:
 	$(CC) -g $(flags) -o build/longest_mates.out src/longest_mates.cpp $(lprophet) $(lzstd)
+
+matesbb:
+	$(CC) -g $(flags) -o build/longest_mates_bishbops.out src/longest_mates_bishbops.cpp $(lprophet) $(lzstd)
