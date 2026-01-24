@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
 
     // sort
     std::vector<fs::path> egtb_paths;
-    for (std::string egtb_id : {"KBBK", "KKBB", "KBBKB", "KBKBB", "KBBKBB"}) {
+    for (std::string egtb_id : get_egtb_identifiers(0, max_npieces)) {
         for (fs::path egtb_path : all_egtb_paths) {
             std::string filename = egtb_path.filename().u8string();
             if (egtb_id == filename.substr(0, filename.find_first_of("."))) {
@@ -109,6 +109,9 @@ int main(int argc, char *argv[]) {
         std::string egtb_filename = egtb_path.filename().u8string();;
         std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
         EGTB egtb = EGTB(egtb_folder, egtb_id);
+        if (egtb.stm_pieces[BISHOP] != 2 && egtb.sntm_pieces[BISHOP] != 2) {
+            continue;
+        }
 
         if (!egtb.exists()) {
             #pragma omp critical
@@ -133,7 +136,7 @@ int main(int argc, char *argv[]) {
                 bool skip = false;
                 for (Color c : {WHITE, BLACK}) {
                     Bitboard b = pos.pieces(c, BISHOP);
-                    if (more_than_one(b)) {
+                    if (popcount(b) == 2) {
                         Square b1 = pop_lsb(b);
                         Square b2 = pop_lsb(b);
                         skip = ((b1 % 2) == (b2 % 2)); // same colored bishop
@@ -186,14 +189,14 @@ int main(int argc, char *argv[]) {
 
 
     std::ofstream file("longest_mates.csv");
-    file << "id,numpos,bytes,fen,dtm,line\n";
+    file << "id,fen,dtm,line\n";
 
     for (uint i = 0; i < egtb_paths.size(); i++) {
         CSVEntry entry = entries[i];
         if (entry.dtm == -1) {
-            file << entry.egtb_id << "," << entry.num_pos << "," << entry.bytes << ",,,\n";
+            file << entry.egtb_id << ",,,\n";
         } else {
-            file << entry.egtb_id << "," << entry.num_pos << "," << entry.bytes << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
+            file << entry.egtb_id << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
         }
     }
 
