@@ -58,6 +58,12 @@ int main(int argc, char *argv[]) {
         std::cout << "Compute all mate lines..." << std::endl;
     }
 
+    // for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
+    //     std::cout << int(sq_to_color(sq)) << "";
+    //     if (file_of(sq) == FILE_H) std::cout << std::endl;
+    // }
+    // exit(1);
+
     prophet_tb_init();
 
     int filecount = 0;
@@ -110,6 +116,7 @@ int main(int argc, char *argv[]) {
         std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
         EGTB egtb = EGTB(egtb_folder, egtb_id);
         if (egtb.stm_pieces[BISHOP] != 2 && egtb.sntm_pieces[BISHOP] != 2) {
+            entries[i] = {egtb_id, 0, 0, "", -2, ""};
             continue;
         }
 
@@ -139,7 +146,7 @@ int main(int argc, char *argv[]) {
                     if (popcount(b) == 2) {
                         Square b1 = pop_lsb(b);
                         Square b2 = pop_lsb(b);
-                        skip = ((b1 % 2) == (b2 % 2)); // same colored bishop
+                        skip = (sq_to_color(b1) == sq_to_color(b2)); // same colored bishop
                     }
                 }
 
@@ -195,7 +202,7 @@ int main(int argc, char *argv[]) {
         CSVEntry entry = entries[i];
         if (entry.dtm == -1) {
             file << entry.egtb_id << ",,,\n";
-        } else {
+        } else if (entry.dtm != -2) {
             file << entry.egtb_id << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
         }
     }

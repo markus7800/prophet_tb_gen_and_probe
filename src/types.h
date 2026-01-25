@@ -362,6 +362,9 @@ constexpr Rank relative_rank(Color c, Square s) { return relative_rank(c, rank_o
 
 constexpr Direction pawn_push(Color c) { return c == WHITE ? NORTH : SOUTH; }
 
+constexpr Color sq_to_color(Square sq) {
+    return Color((sq + (sq >> 3)) % 2);
+}
 
 // Based on a congruential pseudo-random number generator
 constexpr Key make_key(uint64_t seed) {
