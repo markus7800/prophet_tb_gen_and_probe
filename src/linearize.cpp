@@ -491,3 +491,14 @@ void transform_to(const EGPosition &pos, EGPosition &pos2, int8_t h_flip, int8_t
     pos2.set_side_to_move(pos.side_to_move());
 
 }
+
+bool is_diag_symmetric(const EGPosition pos) {
+    for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
+        Piece p = pos.piece_on(sq);
+        if (p) {
+            Square mirror_sq = transform(sq, 0, 3);
+            if (p != pos.piece_on(mirror_sq)) return false;
+        }
+    }
+    return true;
+}
