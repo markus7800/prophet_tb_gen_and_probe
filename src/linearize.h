@@ -17,4 +17,6 @@ void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2);
 
 void transform_to(const EGPosition &pos, EGPosition &pos2, int8_t h_flip, int8_t v_flip, int8_t swap);
 
+bool is_diag_symmetric(const EGPosition pos);
+
 #endif

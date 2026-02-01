@@ -10,10 +10,21 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+#define COMPUTE_WDL_STATS 1
+
 struct CSVEntry {
     std::string egtb_id;
-    uint64_t num_pos;
+    uint64_t num_entries;
     uint64_t bytes;
+#if COMPUTE_WDL_STATS
+    uint64_t num_win_pos;
+    uint64_t num_draw_pos;
+    uint64_t num_loss_pos;
+    uint64_t num_win_ix;
+    uint64_t num_draw_ix;
+    uint64_t num_loss_ix;
+    uint64_t num_broken_ix;
+#endif
     std::string fen;
     int dtm;
     std::string mate_line;
@@ -122,16 +133,61 @@ int main(int argc, char *argv[]) {
         int16_t longest_mate = WIN_IN(0) + 1;
         uint64_t longest_mate_ix = 0;
 
+
+        #if COMPUTE_WDL_STATS
+        uint64_t num_win_pos = 0;
+        uint64_t num_draw_pos = 0;
+        uint64_t num_loss_pos = 0;
+        uint64_t num_win_ix = 0;
+        uint64_t num_draw_ix = 0;
+        uint64_t num_loss_ix = 0;
+        uint64_t num_broken_ix = 0;
+        #endif
+
         for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
             int16_t val = egtb.get_value(ix);
             if (0 < val && val < longest_mate) {
                 longest_mate = val;
                 longest_mate_ix = ix;
             }
+            #if COMPUTE_WDL_STATS
+            EGPosition pos;
+            // positions with pawns restrain king to the four leftmost columns
+            uint64_t multiplier = 2;
+            if (egtb.npawns == 0) {
+                pos.reset();
+                egtb.pos_at_ix(pos, ix, WHITE);
+                // positions without pawns restrict the king to A1-D1-D4 triangle
+                // but we need to account for diagonally symmetric positions
+                multiplier = is_diag_symmetric(pos) ? 4 : 8;
+            }
+            num_win_ix += (val > 0);
+            num_loss_ix += (val < 0);
+            num_win_pos += multiplier * (val > 0);
+            num_loss_pos += multiplier * (val < 0);
+            if (val == 0) {
+                // unused indexes (e.g. illegal positions) are mapped to 0 for compression
+                if (egtb.npawns > 0) {
+                    pos.reset();
+                    egtb.pos_at_ix(pos, ix, WHITE);
+                }
+                bool used = egtb.pos_ix_is_used(pos, ix);
+                num_draw_ix += used;
+                num_draw_pos += multiplier * used;
+                num_broken_ix += !used;
+            }
+            #endif
         }
 
         if (longest_mate == WIN_IN(0) + 1) {
-            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, "", -1, ""};
+            #if COMPUTE_WDL_STATS
+                entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize,
+                    num_win_pos, num_draw_pos, num_loss_pos,
+                    num_win_ix, num_draw_ix, num_loss_ix, num_broken_ix,
+                    "", -1, ""};
+            #else
+                entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, "", -1, ""};
+            #endif
         } else {
             EGPosition pos;
             pos.reset();
@@ -151,7 +207,14 @@ int main(int argc, char *argv[]) {
                 probe_count += dctx->probe_count;
             }
 
-            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line};
+            #if COMPUTE_WDL_STATS
+                entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize,
+                    num_win_pos, num_draw_pos, num_loss_pos,
+                    num_win_ix, num_draw_ix, num_loss_ix, num_broken_ix,
+                    pos.fen(), mate_in_dtm, mate_line};
+            #else
+                entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line};
+            #endif
         }
 
         #pragma omp critical
@@ -167,14 +230,23 @@ int main(int argc, char *argv[]) {
 
 
     std::ofstream file("longest_mates.csv");
-    file << "id,numpos,bytes,fen,dtm,line\n";
+    #if COMPUTE_WDL_STATS
+    file << "id,num_entries,bytes,num_win_pos,num_draw_pos,num_loss_pos,num_win_ix,num_draw_ix,num_loss_ix,num_broken_ix,fen,dtm,line\n";
+    #else
+    file << "id,num_entries,bytes,fen,dtm,line\n";
+    #endif
 
     for (uint i = 0; i < egtb_paths.size(); i++) {
         CSVEntry entry = entries[i];
+            file << entry.egtb_id << "," << entry.num_entries << "," << entry.bytes;
+            #if COMPUTE_WDL_STATS
+            file << "," << entry.num_win_pos << "," << entry.num_draw_pos << "," << entry.num_loss_pos;
+            file << "," << entry.num_win_ix << "," << entry.num_draw_ix << "," << entry.num_loss_ix << "," << entry.num_broken_ix;
+            #endif
         if (entry.dtm == -1) {
-            file << entry.egtb_id << "," << entry.num_pos << "," << entry.bytes << ",,,\n";
+            file << ",,,\n";
         } else {
-            file << entry.egtb_id << "," << entry.num_pos << "," << entry.bytes << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
+            file << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
         }
     }
 
