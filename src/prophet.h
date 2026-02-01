@@ -7,6 +7,8 @@
 extern "C" {
 #endif
 
+// initialisation is not thread-safe
+
 void prophet_tb_init();
 void prophet_tb_deinit();
 
@@ -47,15 +49,16 @@ size_t prophet_tb_get_size_on_disk_of_loaded_files();
 // returns 1000>v>0 if win in v plies
 // returns -1000<v<0 if loss in v plies
 // returns -1001 if table is completely missing (both sides, if one side is missing it performs search)
+// is thread-safe
 int prophet_tb_probe_dtm(const int pieces[6], const int squares[6], const int stm, const int ep_square);
 
-// for better performance reuse DecompressCtx
-// for multi-threading use one DecompressCtx per thread
-typedef struct DecompressCtx DecompressCtx;
-DecompressCtx* CreateDecompressCtx();
-void FreeDecompressCtx(DecompressCtx* dctx);
-// this is thread-safe version of prophet_tb_probe_dtm
-int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, DecompressCtx* dctx);
+// for better performance reuse prophet_tb_decompress_ctx
+// for multi-threading use one prophet_tb_decompress_ctx per thread
+// all functions below are thread-safe
+typedef struct DecompressCtx prophet_tb_decompress_ctx;
+prophet_tb_decompress_ctx* prophet_tb_create_decompress_ctx();
+void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx);
+int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx);
 
 
 #ifdef __cplusplus
