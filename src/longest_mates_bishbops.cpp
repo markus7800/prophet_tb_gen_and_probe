@@ -12,6 +12,7 @@ namespace fs = std::filesystem;
 
 struct CSVEntry {
     std::string egtb_id;
+    bool opposite;
     uint64_t num_pos;
     uint64_t bytes;
     std::string fen;
@@ -102,7 +103,7 @@ int main(int argc, char *argv[]) {
     }
 
 
-    std::vector<CSVEntry> entries(egtb_paths.size());
+    std::vector<CSVEntry> entries(2*egtb_paths.size());
 
     TimePoint t0 = now();
 
@@ -115,10 +116,15 @@ int main(int argc, char *argv[]) {
         std::string egtb_filename = egtb_path.filename().u8string();;
         std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
         EGTB egtb = EGTB(egtb_folder, egtb_id);
-        if (egtb.stm_pieces[BISHOP] != 2 && egtb.sntm_pieces[BISHOP] != 2) {
-            entries[i] = {egtb_id, 0, 0, "", -2, ""};
+
+        bool KBBXvKX_or_KXvKBBxX = egtb.stm_pieces[BISHOP] == 2 || egtb.sntm_pieces[BISHOP] == 2;
+        bool KBXvKBX = egtb.stm_pieces[BISHOP] == 1 && egtb.sntm_pieces[BISHOP] == 1;
+        if (!KBBXvKX_or_KXvKBBxX && !KBXvKBX ) {
+            entries[2*i] = {egtb_id, false, 0, 0, "", -2, ""};
+            entries[2*i+1] = {egtb_id, false, 0, 0, "", -2, ""};
             continue;
         }
+        assert (KBBXvKX_or_KXvKBBxX ^ KBXvKBX);
 
         if (!egtb.exists()) {
             #pragma omp critical
@@ -129,64 +135,85 @@ int main(int argc, char *argv[]) {
         }
         egtb.init_compressed_tb();
 
-        int16_t longest_mate = WIN_IN(0) + 1;
-        uint64_t longest_mate_ix = 0;
+        int16_t longest_mate_same = WIN_IN(0) + 1;
+        uint64_t longest_mate_same_ix = 0;
+
+        int16_t longest_mate_oppo = WIN_IN(0) + 1;
+        uint64_t longest_mate_oppo_ix = 0;
 
         for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
             int16_t val = egtb.get_value(ix);
 
-            if (0 < val && val < longest_mate) {
+            if (0 < val && (val < longest_mate_same || val < longest_mate_oppo)) {
                 EGPosition pos;
                 pos.reset();
                 egtb.pos_at_ix(pos, ix, WHITE);
                 
-                bool skip = false;
-                for (Color c : {WHITE, BLACK}) {
-                    Bitboard b = pos.pieces(c, BISHOP);
-                    if (popcount(b) == 2) {
-                        Square b1 = pop_lsb(b);
-                        Square b2 = pop_lsb(b);
-                        skip = (sq_to_color(b1) == sq_to_color(b2)); // same colored bishop
+                bool same = false;
+                if (KBBXvKX_or_KXvKBBxX) {
+                    same = false;
+                    for (Color c : {WHITE, BLACK}) {
+                        Bitboard b = pos.pieces(c, BISHOP);
+                        if (popcount(b) == 2) {
+                            Square b1 = pop_lsb(b);
+                            Square b2 = pop_lsb(b);
+                            same = (sq_to_color(b1) == sq_to_color(b2)); // same colored bishop
+                        }
                     }
+
+                } else {
+                    Square b1 = lsb(pos.pieces(WHITE, BISHOP));
+                    Square b2 = lsb(pos.pieces(BLACK, BISHOP));
+                    same = (sq_to_color(b1) == sq_to_color(b2)); // same colored bishop
                 }
 
-                if (!skip) {
-                    longest_mate = val;
-                    longest_mate_ix = ix;
+
+                if (same && (val < longest_mate_same)) {
+                    longest_mate_same = val;
+                    longest_mate_same_ix = ix;
+                }
+                if (!same && (val < longest_mate_oppo)) {
+                    longest_mate_oppo = val;
+                    longest_mate_oppo_ix = ix;
                 }
             }
         }
 
-        if (longest_mate == WIN_IN(0) + 1) {
-            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, "", -1, ""};
-        } else {
-            EGPosition pos;
-            pos.reset();
-            egtb.pos_at_ix(pos, longest_mate_ix, WHITE);
+        for (bool same : {false, true}) {
+            int16_t longest_mate = same ? longest_mate_same : longest_mate_oppo;
+            uint64_t longest_mate_ix = same ? longest_mate_same_ix : longest_mate_oppo_ix;
+        
+            if (longest_mate == WIN_IN(0) + 1) {
+                entries[2*i+same] = {egtb_id, !same, egtb.num_pos, egtb.CTB->compressed_filesize, "", -1, ""};
+            } else {
+                EGPosition pos;
+                pos.reset();
+                egtb.pos_at_ix(pos, longest_mate_ix, WHITE);
 
 
-            int mate_in_dtm = WIN_IN(0) - egtb.get_value(longest_mate_ix);
-            
-            std::string mate_line = "";
-            if (compute_lines) {
-                std::ostringstream mate_line_os;
-                DecompressCtx* dctx = new DecompressCtx();
-                for (Move move : get_mate_line(pos, dctx)) {
-                    mate_line_os << move_to_uci(move) << " " ;
+                int mate_in_dtm = WIN_IN(0) - egtb.get_value(longest_mate_ix);
+                
+                std::string mate_line = "";
+                if (compute_lines) {
+                    std::ostringstream mate_line_os;
+                    DecompressCtx* dctx = new DecompressCtx();
+                    for (Move move : get_mate_line(pos, dctx)) {
+                        mate_line_os << move_to_uci(move) << " " ;
+                    }
+                    mate_line = mate_line_os.str();
+
+                    #pragma omp atomic
+                    probe_count += dctx->probe_count;
                 }
-                mate_line = mate_line_os.str();
 
-                #pragma omp atomic
-                probe_count += dctx->probe_count;
+                entries[2*i+same] = {egtb_id, !same, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line};
             }
-
-            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line};
         }
 
         #pragma omp critical
         {
             count++;
-            std::cout << "Finished " << count << "/" << egtb_paths.size() << ": " << entries[i].egtb_id << " " << entries[i].fen << " " << entries[i].dtm << std::endl;
+            std::cout << "Finished " << count << "/" << egtb_paths.size() << ": " << egtb_id << std::endl;
         }
 
     }
@@ -196,14 +223,14 @@ int main(int argc, char *argv[]) {
 
 
     std::ofstream file("longest_mates.csv");
-    file << "id,fen,dtm,line\n";
+    file << "id,opposite_bishops,fen,dtm,line\n";
 
-    for (uint i = 0; i < egtb_paths.size(); i++) {
+    for (uint i = 0; i < 2*egtb_paths.size(); i++) {
         CSVEntry entry = entries[i];
         if (entry.dtm == -1) {
-            file << entry.egtb_id << ",,,\n";
+            file << entry.egtb_id << "," << entry.opposite << ",,,\n";
         } else if (entry.dtm != -2) {
-            file << entry.egtb_id << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
+            file << entry.egtb_id << "," << entry.opposite << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
         }
     }
 
