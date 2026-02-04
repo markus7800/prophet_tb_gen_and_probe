@@ -48,7 +48,7 @@ size_t prophet_tb_get_size_on_disk_of_loaded_files();
 // 0 = WHITE
 // 1 = BLACK
 
-// if positions is valid, is_valid_position returns 1
+// if positions is valid, prophet_tb_is_valid_position returns 1
 // this includes following checks:
 // - are pieces valid, 0 <= p <= 14, otherwise returns -1
 // - are squares valid, 0 <= s <= 63, otherwise returns -1
@@ -57,7 +57,7 @@ size_t prophet_tb_get_size_on_disk_of_loaded_files();
 // - are all specified pieces (!= 0) on different squares, otherwise returns -3
 // - is side-not-to-move in check? -> illegal, returns -4
 // - if ep_square != 0, is en-passant legal on ep_square?, otherwise returns -5
-int is_valid_position(const int pieces[6], const int squares[6], const int stm, const int ep_square);
+int prophet_tb_is_valid_position(const int pieces[6], const int squares[6], const int stm, const int ep_square);
 
 // for valid positions, prophet_tb_probe_dtm:
 // returns v=0 if draw

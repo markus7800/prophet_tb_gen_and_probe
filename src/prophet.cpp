@@ -164,7 +164,7 @@ void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx) {
 }
 
 
-int is_valid_position(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
+int prophet_tb_is_valid_position(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
     if (stm < 0 || stm > 1) return -1;
     EGPosition pos;
     pos.reset();
