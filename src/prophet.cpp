@@ -200,7 +200,7 @@ int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const i
         }
     }
     pos.set_side_to_move(Color(stm));
-    pos.set_ep_square(Square(ep_square));
+    if (ep_square != 0) pos.set_ep_square(Square(ep_square));
     return probe_position_dtm_dctx(pos, dctx);
 }
 
