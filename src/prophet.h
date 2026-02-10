@@ -50,7 +50,9 @@ size_t prophet_tb_get_size_on_disk_of_loaded_files();
 // 1 = BLACK
 
 // use ep_square = 0 or SQ_NONE = 64 to indicate no en-passant possible in position
-// otherwise, en-passant has to be a legal move with ep_square as destination square for pawn
+// otherwise, en-passant has to be a legal move with ep_square as destination square for capturing pawn
+
+// use pieces[i] = NO_PIECE to indicate absence of i-th piece.
 
 // if positions is valid, prophet_tb_is_valid_position returns 1
 // this includes following checks:
