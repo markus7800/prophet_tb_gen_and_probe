@@ -164,7 +164,7 @@ void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx) {
 }
 
 
-int is_valid_position(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
+int prophet_tb_is_valid_position(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
     if (stm < 0 || stm > 1) return -1;
     EGPosition pos;
     pos.reset();
@@ -200,7 +200,7 @@ int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const i
         }
     }
     pos.set_side_to_move(Color(stm));
-    pos.set_ep_square(Square(ep_square));
+    if (ep_square != 0) pos.set_ep_square(Square(ep_square));
     return probe_position_dtm_dctx(pos, dctx);
 }
 
