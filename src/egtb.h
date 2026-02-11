@@ -11,6 +11,8 @@
 #include "egtb_ids.h"
 #include <mutex>
 
+namespace Prophet {
+
 std::string get_default_folder(std::string root_folder, int stm_pieces_[6], int sntm_pieces_[6]);
 std::string get_default_folder_for_id(std::string root_folder, std::string egtb_id);
 
@@ -186,5 +188,7 @@ struct EGTB {
         }
     }
 };
+
+} // namespace Prophet
 
 #endif

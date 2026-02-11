@@ -10,6 +10,8 @@
 #include "egtb_ids.h"
 #include "compressed_tb.h"
 
+namespace Prophet {
+
 // returns v = 0 if draw or illegal position
 // returns 0<1000-v if mate in v plies
 // return -1000+v<0 if loss in v plies
@@ -21,5 +23,7 @@ int dtm(int16_t raw);
 // probe_position_dtm_dctx = dtm(probe_position_raw_dctx)
 int probe_position_dtm_dctx(EGPosition pos, DecompressCtx* dctx);
 int probe_position_dtm(EGPosition pos);
+
+} // namespace Prophet
 
 #endif

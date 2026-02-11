@@ -9,6 +9,8 @@
 #include <sstream>
 #include "uci.h"
 
+namespace Prophet {
+
 std::string get_pieces_identifier(int pieces[6]);
 
 std::string get_egtb_identifier(int stm_pieces[6], int sntm_pieces[6]);
@@ -25,5 +27,7 @@ std::vector<std::string> get_egtb_identifiers(int MIN_PIECE_COUNT = 0, int MAX_P
 
 extern std::unordered_map<std::string, int> EGTB_ID_TO_IX;
 void init_egtb_id_to_ix();
+
+} // namespace Prophet
 
 #endif

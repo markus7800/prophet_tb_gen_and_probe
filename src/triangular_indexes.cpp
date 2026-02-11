@@ -1,5 +1,7 @@
 #include "triangular_indexes.h"
 
+namespace Prophet {
+
 uint64_t _number_of_ordered_tuples(uint64_t n_domain, uint64_t n_tuple) {
     uint64_t res = 1;
     uint64_t f = 1;
@@ -177,3 +179,5 @@ void test_tril_4(uint64_t n_domain) {
 // test_tril(n_domain, 3);
 // test_tril_4(n_domain);
 // test_tril(n_domain, 4);
+
+} // namespace Prophet
