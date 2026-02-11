@@ -4,6 +4,8 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+using namespace Prophet;
+
 int main() {
 
     std::string folder = "egtbs";

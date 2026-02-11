@@ -15,6 +15,8 @@
 
 #define CHUNKSIZE 2048
 
+using namespace Prophet;
+
 class GenEGTB {
     std::string folder;
     int wpieces[6];

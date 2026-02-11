@@ -4,6 +4,8 @@
 
 #include "eg_position.h"
 
+namespace Prophet {
+
 enum EGGenType {
     FORWARD, // all legal moves except castling and en-passant (for now)
     FWD_EVASIONS, // if in check all legal evasions
@@ -58,5 +60,7 @@ private:
     Move moveList[MAX_MOVES], *last_move;
     UndoInfo undoInfoList[MAX_MOVES], *last;
 };
+
+} // namespace Prophet
 
 #endif

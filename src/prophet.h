@@ -79,7 +79,7 @@ int prophet_tb_probe_dtm(const int pieces[6], const int squares[6], const int st
 // for better performance reuse prophet_tb_decompress_ctx
 // for multi-threading use one prophet_tb_decompress_ctx per thread
 // all functions below are thread-safe
-typedef struct DecompressCtx prophet_tb_decompress_ctx;
+typedef struct prophet_tb_decompress_ctx prophet_tb_decompress_ctx;
 prophet_tb_decompress_ctx* prophet_tb_create_decompress_ctx();
 void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx);
 int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx);

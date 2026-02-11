@@ -10,6 +10,8 @@
 #include <sys/mman.h> // mmap
 #include <sys/stat.h> // file size
 
+namespace Prophet {
+
 std::string get_default_folder(std::string root_folder, int stm_pieces[6], int sntm_pieces[6]) {
     assert (!root_folder.empty() && root_folder.back() != '/');
     int npieces = 2;
@@ -126,3 +128,4 @@ void EGTB::free_tb() {
     this->loaded = false;
 }
 
+} // namespace Prophet

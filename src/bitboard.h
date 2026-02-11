@@ -29,6 +29,8 @@
 
 #include "types.h"
 
+namespace Prophet {
+
 namespace Bitboards {
 
 void        init();
@@ -446,5 +448,6 @@ inline Square nth_unset_sq(Bitboard x, int n) {
     return lsb(nth_unset_bb(x,n));
 }
 
+} // namespace Prophet
 
 #endif  // #ifndef BITBOARD_H_INCLUDED

@@ -10,6 +10,7 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+using namespace Prophet;
 
 int main(int argc, char *argv[]) {
     assert (argc == 3);
