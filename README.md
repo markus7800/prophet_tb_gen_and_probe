@@ -55,9 +55,13 @@ OpenMP is recommended for this computation.
 
 On my 32 thread system, 4-men takes <1 minute and 5-men takes <2 hours to compute. (5-men needs 7 GiB disk space and 16GB RAM).
 
-## Downloads 
+## Lichess
 
-To be announced.
+Prophet TB has been uploaded and [integrated](https://github.com/lichess-org/lila-tablebase/pull/184) in Lichess.
+
+You can probe your positions from the [analysis board](https://lichess.org/analysis/standard/6N1/5KR1/2n5/8/8/8/2n5/1k6_w_-_-_0_1).
+
+## Downloads 
 
 If you have downloaded files you can check their integrity with
 ```
