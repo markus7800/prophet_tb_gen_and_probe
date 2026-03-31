@@ -3,6 +3,8 @@
 #include <vector>
 #include <cstring>
 
+namespace Prophet {
+
 uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nthreads) {
   uint64_t s = 0;
   #pragma omp parallel for num_threads(nthreads) schedule(static) reduction(^:s)
@@ -123,3 +125,4 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
   return final_size;
 }
 
+} // namespace Prophet

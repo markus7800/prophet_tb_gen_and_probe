@@ -1,4 +1,9 @@
+#ifndef VALUES_H_INCLUDED
+#define VALUES_H_INCLUDED
+
 #include <cstdint>
+
+namespace Prophet {
 
 #define UNUSED 1111
 #define UNKNOWN 1110
@@ -12,3 +17,7 @@ inline int16_t IS_SET(int16_t val) { return LOSS_IN(0) <= val && val <= WIN_IN(0
 inline int16_t IS_LOWERBOUND(int16_t val) { return LOSS_IN(0) + LOWERBOUND_OFFSET <= val && val <= WIN_IN(0) + LOWERBOUND_OFFSET; };
 inline int16_t VAL_TO_LOWERBOUND(int16_t val) { return val + LOWERBOUND_OFFSET; };
 inline int16_t LOWERBOUND_TO_VAL(int16_t lb) { return lb - LOWERBOUND_OFFSET; };
+
+} // namespace Prophet
+
+#endif

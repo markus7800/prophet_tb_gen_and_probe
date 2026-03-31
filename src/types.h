@@ -90,6 +90,7 @@
         #define pext(b, m) 0
     #endif
 
+namespace Prophet {
 
     #ifdef USE_POPCNT
 constexpr bool HasPopCnt = true;
@@ -446,5 +447,6 @@ struct is_all_same {
 template<typename... Ts>
 constexpr auto is_all_same_v = is_all_same<Ts...>::value;
 
+} // namespace Prophet
 
 #endif  // #ifndef TYPES_H_INCLUDED

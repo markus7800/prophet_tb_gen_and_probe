@@ -7,6 +7,8 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+using namespace Prophet;
+
 void load_file(std::string filename, int16_t*& TB, u_int64_t& num_pos, bool verbose) {
   // load file
   FILE* f = fopen(filename.c_str(), "rb");

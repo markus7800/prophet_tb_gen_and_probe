@@ -10,6 +10,8 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+using namespace Prophet;
+
 struct CSVEntry {
     std::string egtb_id;
     uint64_t num_pos;

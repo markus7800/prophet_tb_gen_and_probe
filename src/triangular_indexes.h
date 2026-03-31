@@ -6,6 +6,8 @@
 #include <iostream>
 #include <cassert>
 
+namespace Prophet {
+
 uint64_t _number_of_ordered_tuples(uint64_t n_domain, uint64_t n_tuple);
 
 extern uint64_t NUMBER_OF_ORDER_TUPLES[65][8];
@@ -33,5 +35,7 @@ void test_tril_2(uint64_t n_domain);
 void test_tril_3(uint64_t n_domain);
 
 void test_tril_4(uint64_t n_domain);
+
+} // namespace Prophet
 
 #endif

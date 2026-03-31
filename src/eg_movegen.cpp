@@ -1,6 +1,7 @@
 
 #include "eg_movegen.h"
 
+namespace Prophet {
 
 template<Direction offset, EGGenType Type>
 inline Move* splat_pawn_moves(Move* moveList, Bitboard to_bb) {
@@ -367,3 +368,5 @@ Move* generate_reverse(const EGPosition& pos, Move* moveList, PieceType captured
     }
     return moveList;
 }
+
+} // namespace Prophet

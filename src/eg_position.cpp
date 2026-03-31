@@ -2,6 +2,8 @@
 #include "eg_position.h"
 #include <sstream>
 
+namespace Prophet {
+
 bool EGPosition::is_equal(const EGPosition& pos) const {
     if (sideToMove != pos.sideToMove) { return false; }
     if (epSquare != pos.epSquare) { return false; }
@@ -280,3 +282,5 @@ Bitboard EGPosition::blockers_for_king(Color c) const {
     }
     return blockersForKing;
 }
+
+} // namespace Prophet

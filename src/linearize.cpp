@@ -1,5 +1,7 @@
 #include "linearize.h"
 
+namespace Prophet {
+
 void compute_poscounts(const int stm_pieces[6], const int sntm_pieces[6], uint64_t kntm_poscounts[], uint64_t& num_nonep_pos, uint64_t& num_ep_pos, uint64_t& num_pos) {
     Bitboard unblockable_checks = 0;
     Bitboard forbidden_squares = 0;
@@ -491,3 +493,5 @@ void transform_to(const EGPosition &pos, EGPosition &pos2, int8_t h_flip, int8_t
     pos2.set_side_to_move(pos.side_to_move());
 
 }
+
+} // namespace Prophet

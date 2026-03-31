@@ -17,6 +17,8 @@
 #define COMPRESSION_LEVEL 19
 #define BLOCKSIZE 32768
 
+using namespace Prophet;
+
 int main(int argc, char *argv[]) {
     Bitboards::init();
     init_kkx_table();

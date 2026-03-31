@@ -1,5 +1,7 @@
 #include "egtb_ids.h"
 
+namespace Prophet {
+
 std::string get_pieces_identifier(int pieces[6]) {
     std::ostringstream os;
     os << "K";
@@ -126,3 +128,5 @@ void init_egtb_id_to_ix() {
         EGTB_ID_TO_IX[egtb_id] = count;
     }
 }
+
+} // namespace Prophet

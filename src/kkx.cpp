@@ -1,5 +1,7 @@
 #include "kkx.h"
 
+namespace Prophet {
+
 Square KSQs_NP_HALF_OCT[10] = {
     SQ_A1, SQ_B1, SQ_C1, SQ_D1,
            SQ_B2, SQ_C2, SQ_D2,
@@ -242,3 +244,5 @@ const uint64_t EP_IX[8][3] = {
     {11, 0, 12}, // SQ_G5
     {13, 0, 0}, // SQ_H5
 };
+
+} // namespace Prophet

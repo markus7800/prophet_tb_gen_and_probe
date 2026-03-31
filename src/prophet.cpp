@@ -1,4 +1,5 @@
 #include "prophet.h"
+#include "prophet_common.h"
 #include "bitboard.h"
 #include "kkx.h"
 #include "triangular_indexes.h"
@@ -15,8 +16,97 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+using namespace Prophet;
+
+
+namespace {
+
+std::string egtb_id_from_pos(const EGPosition& pos) {
+    std::ostringstream os;
+    for (Color c : {pos.side_to_move(), ~pos.side_to_move()}) {
+        for (PieceType pt : {KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN}) {
+            for (int i = 0; i < pos.count(c, pt); i++) {
+                os << PieceToChar[pt];
+            }
+        }
+    }
+    return os.str();
+}
+
+} // namespace
+
+
+namespace Prophet {
+
+#define ERROR_TB_MISSING -1001
+#define DRAW_VAL 1000
+
 bool lazy_load = true;
 std::unordered_map<std::string, EGTB*> id_to_egtb = {};
+
+int16_t probe_position_raw_dctx(EGPosition pos, DecompressCtx* dctx) {
+    std::string egtb_id = egtb_id_from_pos(pos);
+    std::string mirror_id = get_mirror_id(egtb_id);
+    if (id_to_egtb[egtb_id] == nullptr && id_to_egtb[mirror_id] == nullptr) {
+        return ERROR_TB_MISSING;
+    }
+
+    if (id_to_egtb[egtb_id] != nullptr) {
+        if (lazy_load) id_to_egtb[egtb_id]->ensure_compressed_tb_initialised();
+        return id_to_egtb[egtb_id]->query_postion_dctx(pos, dctx);
+    } else {
+        EGMoveList movelist = EGMoveList(pos);
+        if (movelist.size() == 0) {
+            if (pos.stm_in_check()) {
+                return LOSS_IN(0);
+            } else {
+                return 0;
+            }
+        }
+        int16_t max_val = LOSS_IN(0);
+        for (Move move : movelist) {
+            UndoInfo u = pos.do_move(move);
+            int16_t val = probe_position_raw_dctx(pos, dctx);
+            max_val = std::max(max_val, (int16_t) -val);
+            pos.undo_move(u);
+        }
+        if (max_val > 0) max_val--;
+        if (max_val < 0) max_val++;
+        return max_val;
+    }
+}
+
+int16_t probe_position_raw_dtm(EGPosition pos) {
+    DecompressCtx* dctx = new DecompressCtx(32768);
+    int val = probe_position_raw_dctx(pos, dctx);
+    delete dctx;
+    return val;
+}
+
+int probe_position_dtm_dctx(EGPosition pos, DecompressCtx* dctx) {
+    return dtm(probe_position_raw_dctx(pos, dctx));
+}
+
+int probe_position_dtm(EGPosition pos) {
+    DecompressCtx* dctx = new DecompressCtx(32768);
+    int val = probe_position_dtm_dctx(pos, dctx);
+    delete dctx;
+    return val;
+}
+
+int dtm(int16_t raw) {
+    if (raw == ERROR_TB_MISSING) {
+        return ERROR_TB_MISSING;
+    } else if (raw == 0) {
+        return DRAW_VAL;
+    } else if (raw > 0) {
+        return WIN_IN(0) - raw;
+    } else {
+        return LOSS_IN(0) - raw;
+    }
+}
+
+} // namespace Prophet
 
 
 void prophet_tb_init() {
@@ -79,87 +169,14 @@ void prophet_tb_deinit() {
 }
 
 
-std::string egtb_id_from_pos(const EGPosition pos) {
-    std::ostringstream os;
-    for (Color c : {pos.side_to_move(), ~pos.side_to_move()}) {
-        for (PieceType pt : {KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN}) {
-            for (int i = 0; i < pos.count(c, pt); i++) {
-                os << PieceToChar[pt];
-            }
-        }
-    }
-    return os.str();
-}
-
-#define ERROR_TB_MISSING -1001
-#define DRAW_VAL 1000
-
-int dtm(int16_t raw) {
-    if (raw == ERROR_TB_MISSING) {
-        return ERROR_TB_MISSING;
-    } else if (raw == 0) {
-        return DRAW_VAL;
-    } else if (raw > 0) {
-        return WIN_IN(0) - raw;
-    } else {
-        return LOSS_IN(0) - raw;
-    }
-}
-
-
-int16_t probe_position_raw_dctx(EGPosition pos, DecompressCtx* dctx) {
-    std::string egtb_id = egtb_id_from_pos(pos);
-    std::string mirror_id = get_mirror_id(egtb_id);
-    if (id_to_egtb[egtb_id] == nullptr && id_to_egtb[mirror_id] == nullptr) {
-        return ERROR_TB_MISSING;
-    }
-
-    if (id_to_egtb[egtb_id] != nullptr) {
-        if (lazy_load) id_to_egtb[egtb_id]->ensure_compressed_tb_initialised();
-        return id_to_egtb[egtb_id]->query_postion_dctx(pos, dctx);
-    } else {
-        EGMoveList movelist = EGMoveList(pos);
-        if (movelist.size() == 0) {
-            if (pos.stm_in_check()) {
-                return LOSS_IN(0);
-            } else {
-                return 0;
-            }
-        }
-        int16_t max_val = LOSS_IN(0);
-        for (Move move : movelist) {
-            UndoInfo u = pos.do_move(move);
-            int16_t val = probe_position_raw_dctx(pos, dctx);
-            max_val = std::max(max_val, (int16_t) -val);
-            pos.undo_move(u);
-        }
-        if (max_val > 0) max_val--;
-        if (max_val < 0) max_val++;
-        return max_val;
-    }
-}
-int probe_position_dtm_dctx(EGPosition pos, DecompressCtx* dctx) {
-    return dtm(probe_position_raw_dctx(pos, dctx));
-}
-
-int probe_position_dtm(EGPosition pos) {
-    DecompressCtx* dctx = new DecompressCtx(32768);
-    int val = probe_position_dtm_dctx(pos, dctx);
-    delete dctx;
-    return val;
-}
-
-int16_t probe_position_raw_dtm(EGPosition pos) {
-    DecompressCtx* dctx = new DecompressCtx(32768);
-    int val = probe_position_raw_dctx(pos, dctx);
-    delete dctx;
-    return val;
-}
-
+struct prophet_tb_decompress_ctx : public DecompressCtx {
+    using DecompressCtx::DecompressCtx;
+};
 
 prophet_tb_decompress_ctx* prophet_tb_create_decompress_ctx() {
-    return new DecompressCtx(32768);
+    return new prophet_tb_decompress_ctx(32768);
 }
+
 void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx) {
     delete dctx;
 }
@@ -208,7 +225,7 @@ int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const i
 
 
 int prophet_tb_probe_dtm(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
-    DecompressCtx* dctx = new DecompressCtx(32768);
+    prophet_tb_decompress_ctx* dctx = new prophet_tb_decompress_ctx(32768);
     int val = prophet_tb_probe_dtm_dctx(pieces, squares, stm, ep_square, dctx);
     delete dctx;
     return val;

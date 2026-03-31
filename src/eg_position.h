@@ -9,6 +9,7 @@
 #include "bitboard.h"
 #include "uci.h"
 
+namespace Prophet {
 
 struct UndoInfo {
     Move move;
@@ -212,5 +213,6 @@ inline bool EGPosition::stm_in_check() const {
     return checkers(side_to_move());
 }
 
+} // namespace Prophet
 
 #endif

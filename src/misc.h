@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <chrono>
 
+namespace Prophet {
+
 class PRNG {
 
     uint64_t s;
@@ -44,6 +46,6 @@ inline TimePoint now() {
       .count();
 }
 
-
+} // namespace Prophet
 
 #endif

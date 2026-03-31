@@ -1,6 +1,6 @@
 #include "uci.h"
 
-
+namespace Prophet {
 
 std::string square_to_uci(Square s) {
     return std::string{char('a' + file_of(s)), char('1' + rank_of(s))};
@@ -26,3 +26,5 @@ std::string move_to_uci(Move m) {
 
     return move;
 }
+
+} // namespace Prophet
