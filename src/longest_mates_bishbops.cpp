@@ -12,11 +12,22 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+#define COMPUTE_WDL_STATS 1
+
 struct CSVEntry {
     std::string egtb_id;
     std::string bishop_config;
-    uint64_t num_pos;
+    uint64_t num_entries;
     uint64_t bytes;
+#if COMPUTE_WDL_STATS
+    uint64_t num_win_pos;
+    uint64_t num_draw_pos;
+    uint64_t num_loss_pos;
+    uint64_t num_win_ix;
+    uint64_t num_draw_ix;
+    uint64_t num_loss_ix;
+    uint64_t num_broken_ix;
+#endif
     std::string fen;
     int dtm;
     std::string mate_line;
@@ -213,6 +224,17 @@ int main(int argc, char *argv[]) {
 
         int16_t longest_mate[19] = {int16_t()};
         uint64_t longest_mate_ix[19] = {0};
+
+        #if COMPUTE_WDL_STATS
+        uint64_t num_win_pos[19] = {0};
+        uint64_t num_draw_pos[19] = {0};
+        uint64_t num_loss_pos[19] = {0};
+        uint64_t num_win_ix[19] = {0};
+        uint64_t num_draw_ix[19] = {0};
+        uint64_t num_loss_ix[19] = {0};
+        uint64_t num_broken_ix[19] = {0};
+        #endif
+
         for (uint j = 0; j < B.size(); j++) {
             std::string config = B[j];
             int b_stm_bishop_count = (int) (config[1] - '0') + (int) (config[2] - '0');
@@ -223,6 +245,13 @@ int main(int argc, char *argv[]) {
                 longest_mate[j] = -1;
             }
             longest_mate_ix[j] = 0;
+            num_win_pos[j] = 0;
+            num_draw_pos[j] = 0;
+            num_loss_pos[j] = 0;
+            num_win_ix[j] = 0;
+            num_draw_ix[j] = 0;
+            num_loss_ix[j] = 0;
+            num_broken_ix[j] = 0;
         }
 
         for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
@@ -231,7 +260,7 @@ int main(int argc, char *argv[]) {
             bool lb = false;
             for (uint j = 0; j < B.size(); j++) lb = lb || (val < longest_mate[j]);
 
-            if (0 < val && lb) {
+            if (COMPUTE_WDL_STATS || (0 < val && lb)) {
                 EGPosition pos;
                 pos.reset();
                 egtb.pos_at_ix(pos, ix, WHITE);
@@ -260,10 +289,32 @@ int main(int argc, char *argv[]) {
                 ss << SNTM_2;
                 int Bix = b_to_ix[ss.str()];
 
-                if (val < longest_mate[Bix]) {
+                if (0 < val && val < longest_mate[Bix]) {
                     longest_mate[Bix] = val;
                     longest_mate_ix[Bix] = ix;
                 }
+            
+                #if COMPUTE_WDL_STATS
+
+                // positions with pawns restrain king to the four leftmost columns
+                uint64_t multiplier = 2;
+                if (egtb.npawns == 0) {
+                    // positions without pawns restrict the king to A1-D1-D4 triangle
+                    // but we need to account for diagonally symmetric positions
+                    multiplier = is_diag_symmetric(pos) ? 4 : 8;
+                }
+                num_win_ix[Bix] += (val > 0);
+                num_loss_ix[Bix] += (val < 0);
+                num_win_pos[Bix]+= multiplier * (val > 0);
+                num_loss_pos[Bix] += multiplier * (val < 0);
+                if (val == 0) {
+                    // unused indexes (e.g. illegal positions) are mapped to 0 for compression
+                    bool used = egtb.pos_ix_is_used(pos, ix);
+                    num_draw_ix[Bix] += used;
+                    num_draw_pos[Bix] += multiplier * used;
+                    num_broken_ix[Bix] += !used;
+                }
+                #endif
             }
         }
 
@@ -275,14 +326,40 @@ int main(int argc, char *argv[]) {
             if (longest_mate[j] == -1) continue;
         
             if (longest_mate[j] == WIN_IN(0) + 1) {
-                entries.push_back({egtb_id, config, egtb.num_pos, egtb.CTB->compressed_filesize, "", -1, ""});
+                #if COMPUTE_WDL_STATS
+                    entries.push_back({egtb_id, config, egtb.num_pos, egtb.CTB->compressed_filesize,
+                        num_win_pos[j], num_draw_pos[j], num_loss_pos[j],
+                        num_win_ix[j], num_draw_ix[j], num_loss_ix[j], num_broken_ix[j],
+                        "", -1, ""});
+                #else
+                    entries.push_back({egtb_id, config, egtb.num_entries, egtb.CTB->compressed_filesize, "", -1, ""});
+                #endif
             } else {
+                EGPosition tmp_pos;
+                tmp_pos.reset();
+
+                egtb.pos_at_ix(tmp_pos, longest_mate_ix[j], WHITE);
+
+                int STM_1 = popcount(tmp_pos.pieces(WHITE, BISHOP) & WHITE_SQs);
+                int STM_2 = popcount(tmp_pos.pieces(WHITE, BISHOP) & BLACK_SQs);
+
+                int SNTM_1 = popcount(tmp_pos.pieces(BLACK, BISHOP) & WHITE_SQs);
+                int SNTM_2 = popcount(tmp_pos.pieces(BLACK, BISHOP) & BLACK_SQs);
+
                 EGPosition pos;
                 pos.reset();
-                egtb.pos_at_ix(pos, longest_mate_ix[j], WHITE);
 
-
-                int mate_in_dtm = WIN_IN(0) - egtb.get_value(longest_mate_ix[j]);
+                // std::cout << "ENDGAME:" << std::endl;
+                // std::cout << tmp_pos << STM_1 << " " << STM_2 << " " << SNTM_1 << " " << SNTM_2 << std::endl;
+                if (STM_1 < STM_2 || (STM_1 == STM_2 && SNTM_1 < SNTM_2)) {
+                    // black squares should have bishop majority
+                    transform_to(tmp_pos, pos, 7, 0, 0); // flip horizontally
+                    // std::cout << "transform to:" << std::endl;
+                    // std::cout << pos << std::endl;
+                } else {
+                    pos = tmp_pos;
+                    // std::cout << "do not transform." << std::endl;
+                }
                 
                 std::string mate_line = "";
                 if (compute_lines) {
@@ -297,7 +374,16 @@ int main(int argc, char *argv[]) {
                     probe_count += dctx->probe_count;
                 }
 
-                entries.push_back({egtb_id, config, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line});
+                int mate_in_dtm = WIN_IN(0) - egtb.get_value(longest_mate_ix[j]);
+
+                #if COMPUTE_WDL_STATS
+                    entries.push_back({egtb_id, config, egtb.num_pos, egtb.CTB->compressed_filesize,
+                        num_win_pos[j], num_draw_pos[j], num_loss_pos[j],
+                        num_win_ix[j], num_draw_ix[j], num_loss_ix[j], num_broken_ix[j],
+                        pos.fen(), mate_in_dtm, mate_line});
+                #else
+                    entries.push_back({egtb_id, config, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line});
+                #endif    
             }
         }
 
@@ -311,15 +397,23 @@ int main(int argc, char *argv[]) {
     std::cout << "Finished in " << (double) (t1-t0) / 1000 << "s. Probe count = " << probe_count << std::endl;
 
 
-    std::ofstream file("longest_mates.csv");
-    file << "id,bishop_config,fen,dtm";
-    file << (compute_lines ? ",line\n" : "\n");
+    std::ofstream file("longest_mates_bb.csv");
+    #if COMPUTE_WDL_STATS
+    file << "id,bishop_config,num_entries,bytes,num_win_pos,num_draw_pos,num_loss_pos,num_win_ix,num_draw_ix,num_loss_ix,num_broken_ix,fen,dtm,line\n";
+    #else
+    file << "id,bishop_config,num_entries,bytes,fen,dtm,line\n";
+    #endif
 
     for (CSVEntry entry : entries) {
+        file << entry.egtb_id << "," << entry.bishop_config << "," << entry.num_entries << "," << entry.bytes;
+        #if COMPUTE_WDL_STATS
+        file << "," << entry.num_win_pos << "," << entry.num_draw_pos << "," << entry.num_loss_pos;
+        file << "," << entry.num_win_ix << "," << entry.num_draw_ix << "," << entry.num_loss_ix << "," << entry.num_broken_ix;
+        #endif
         if (entry.dtm == -1) {
-            file << entry.egtb_id << "," << entry.bishop_config << ",,,\n";
-        } else if (entry.dtm != -2) {
-            file << entry.egtb_id << "," << entry.bishop_config << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
+            file << ",,,\n";
+        } else {
+            file << "," << entry.fen << "," << entry.dtm << "," << entry.mate_line << "\n";
         }
     }
 

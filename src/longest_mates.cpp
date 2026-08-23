@@ -238,11 +238,11 @@ int main(int argc, char *argv[]) {
 
     for (uint i = 0; i < egtb_paths.size(); i++) {
         CSVEntry entry = entries[i];
-            file << entry.egtb_id << "," << entry.num_entries << "," << entry.bytes;
-            #if COMPUTE_WDL_STATS
-            file << "," << entry.num_win_pos << "," << entry.num_draw_pos << "," << entry.num_loss_pos;
-            file << "," << entry.num_win_ix << "," << entry.num_draw_ix << "," << entry.num_loss_ix << "," << entry.num_broken_ix;
-            #endif
+        file << entry.egtb_id << "," << entry.num_entries << "," << entry.bytes;
+        #if COMPUTE_WDL_STATS
+        file << "," << entry.num_win_pos << "," << entry.num_draw_pos << "," << entry.num_loss_pos;
+        file << "," << entry.num_win_ix << "," << entry.num_draw_ix << "," << entry.num_loss_ix << "," << entry.num_broken_ix;
+        #endif
         if (entry.dtm == -1) {
             file << ",,,\n";
         } else {
