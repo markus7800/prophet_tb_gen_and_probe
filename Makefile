@@ -31,9 +31,15 @@ endif
 
 prophet: flags += -fPIC
 
-.PHONY: lib gen mates compress prophet
+.PHONY: lib gen mates compress prophet check test clean
 
-lib:
+build:
+	mkdir -p build
+
+clean:
+	rm -rf build
+
+lib: | build
 	$(CC) -g $(flags) -c -o build/bitboard.o src/bitboard.cpp
 	$(CC) -g $(flags) -c -o build/compressed_tb.o src/compressed_tb.cpp $(lzstd)
 	$(CC) -g $(flags) -c -o build/eg_movegen.o src/eg_movegen.cpp
@@ -47,22 +53,22 @@ lib:
 
 corefiles = build/bitboard.o build/compressed_tb.o build/eg_movegen.o build/eg_position.o build/egtb.o build/egtb_ids.o build/kkx.o build/linearize.o build/triangular_indexes.o build/uci.o
 
-gen: lib
+gen: lib | build
 	$(CC) -g $(flags) -o build/gen_main.out src/gen_main.cpp $(corefiles) $(lzstd)
 
-compress:
+compress: | build
 	$(CC) -g $(flags) -o build/compress_files.out src/compress_files.cpp $(corefiles) $(lzstd)
 
-prophet: lib
+prophet: lib | build
 	$(CC) -g $(flags) -shared -o build/libprophet.so src/prophet.cpp $(corefiles) $(lzstd)
 
 lprophet = -I src -L build -lprophet -Wl,-rpath,'$$ORIGIN'
 
-check:
+check: | build
 	$(CC) -g $(flags) -o build/check_file_integrity.out src/check_file_integrity.cpp $(lprophet) $(lzstd)
 
-mates:
+mates: | build
 	$(CC) -g $(flags) -o build/longest_mates.out src/longest_mates.cpp $(lprophet) $(lzstd)
 
-test:
+test: | build
 	$(CC) -g $(flags) -o build/test.out src/test.cpp $(lprophet) $(lzstd)
