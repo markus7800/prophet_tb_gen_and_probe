@@ -14,8 +14,19 @@
 
 #define CONSISTENCY_CHECK_MAX_BYTES 96636764160ULL
 // == 90 GiB = 96GB
+// override at compile time with make ZSTD_LEVEL=... BLOCKSIZE=...
+#ifdef EGTB_COMPRESSION_LEVEL
+#define COMPRESSION_LEVEL EGTB_COMPRESSION_LEVEL
+#else
 #define COMPRESSION_LEVEL 19
+#endif
+#ifdef EGTB_BLOCKSIZE
+#define BLOCKSIZE EGTB_BLOCKSIZE
+#else
 #define BLOCKSIZE 32768
+#endif
+static_assert(BLOCKSIZE % 8 == 0, "BLOCKSIZE must be divisible by 8");
+static_assert(1 <= COMPRESSION_LEVEL && COMPRESSION_LEVEL <= 22, "COMPRESSION_LEVEL must be in [1, 22]");
 
 int main(int argc, char *argv[]) {
     Bitboards::init();

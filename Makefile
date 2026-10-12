@@ -9,9 +9,21 @@ flags = -std=c++17 -Wall -Wcast-qual -Wno-unused-command-line-argument -fno-exce
 lzstd = -I zstd/lib zstd/lib/libzstd.a
 
 ifdef OMP
+ifeq ($(shell uname -s),Darwin)
+	# Apple clang has no built-in OpenMP; use Homebrew's libomp
+	LIBOMP ?= $(shell brew --prefix libomp)
+	flags += -Xpreprocessor -fopenmp -I$(LIBOMP)/include -L$(LIBOMP)/lib -lomp -DOMP
+else
 	flags += -fopenmp -DOMP
+endif
 else
 	flags += -Wno-unknown-pragmas
+endif
+ifdef BLOCKSIZE
+	flags += -DEGTB_BLOCKSIZE=$(BLOCKSIZE)
+endif
+ifdef ZSTD_LEVEL
+	flags += -DEGTB_COMPRESSION_LEVEL=$(ZSTD_LEVEL)
 endif
 ifdef PDEP
 	flags += -mbmi2 -DPDEP

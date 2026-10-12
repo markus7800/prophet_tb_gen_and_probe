@@ -51,6 +51,7 @@ make gen OMP=1
 and run `build/gen_main.out [folder] [max_npieces] [threads]` to compute with `[threads]` number of threads the tables for all piece configuration with a maximum number of `[max_npieces]` pieces.
 Results are stored in `[folder]`
 You may build with `PDEP=1` to use BMI2's PDEP instruction.
+The zstd compression level (default `19`) and block size (default `32768`, must be divisible by 8) can be set at compile time with e.g. `ZSTD_LEVEL=22 BLOCKSIZE=65536`.
 OpenMP is recommended for this computation.
 
 On my 32 thread system, 4-men takes <1 minute and 5-men takes <2 hours to compute. (5-men needs 7 GiB disk space and 16GB RAM).
