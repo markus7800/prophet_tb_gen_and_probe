@@ -6,7 +6,7 @@
 
 CC = g++
 flags = -std=c++17 -Wall -Wcast-qual -Wno-unused-command-line-argument -fno-exceptions -pedantic -Wextra -Wshadow -m64 -flto=auto -funroll-loops -DIS_64BIT -DUSE_POPCNT -O3
-lzstd = -I zstd/lib -L zstd/lib -lzstd
+lzstd = -I zstd/lib zstd/lib/libzstd.a
 
 ifdef OMP
 	flags += -fopenmp -DOMP
