@@ -66,6 +66,20 @@ int main(int argc, char *argv[]) {
 
         } else {
             std::cout << "Already exists." << std::endl;
+            // tables are used as dependencies of later tables, which requires them to have block size BLOCKSIZE
+            if (egtb.exists_compressed()) {
+                std::string compressed_filename = egtb.get_filename() + COMP_EXT;
+                uint64_t checksum, num_pos, block_size;
+                if (!read_compressed_header(compressed_filename, checksum, num_pos, block_size) ||
+                    num_pos != egtb.num_pos || !is_complete_compressed_file(compressed_filename)) {
+                    std::cerr << compressed_filename << " is corrupt. Delete it to regenerate." << std::endl;
+                    exit(1);
+                }
+                if (block_size != BLOCKSIZE) {
+                    std::cout << "Recompress from block size " << block_size << " to " << BLOCKSIZE << "." << std::endl;
+                    recompress_TB(compressed_filename, compressed_filename, nthreads, COMPRESSION_LEVEL, BLOCKSIZE, true);
+                }
+            }
         }
     }
     
