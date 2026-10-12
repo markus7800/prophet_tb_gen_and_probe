@@ -61,6 +61,9 @@ struct DecompressCtx {
   }
 };
 
+// store offset of every OFFSET_STRIDE-th block, the others are computed from the block sizes
+#define OFFSET_STRIDE 32
+
 struct CompressedTB {
   int egtb_ix;
   std::string compressed_filename;
@@ -69,8 +72,9 @@ struct CompressedTB {
   uint64_t num_pos;
   uint64_t block_size;
   uint64_t n_blocks;
-  uint64_t* block_sizes;
-  uint64_t* block_offsets;
+  bool large_blocks;
+  uint8_t* block_sizes_ptr; // points into mmaped file, UINT32 if large_blocks else UINT16
+  uint64_t* sparse_block_offsets; // offset of every OFFSET_STRIDE-th block
   uint8_t* map_ptr;
   uint8_t* compressed_blocks;
   DecompressCtx* decompress_ctx;
@@ -102,24 +106,16 @@ struct CompressedTB {
     this->block_size = ((uint64_t*) this->map_ptr)[2];
     this->n_blocks = ceil((double) num_pos / block_size);
     
-    bool large_blocks = block_size > uint64_t(UINT16_MAX);
-    this->block_sizes = (uint64_t*) malloc(n_blocks * sizeof(uint64_t));
-    if (large_blocks) {
-      uint32_t* block_sizes_ptr = (uint32_t*) &this->map_ptr[headersize];
-      for (uint64_t i = 0; i < n_blocks; i++) this->block_sizes[i] = block_sizes_ptr[i];
-      this->compressed_blocks = &this->map_ptr[headersize + this->n_blocks*sizeof(uint32_t)];
-    } else {
-      uint16_t* block_sizes_ptr = (uint16_t*) &this->map_ptr[headersize];
-      for (uint64_t i = 0; i < n_blocks; i++) this->block_sizes[i] = block_sizes_ptr[i];
-      this->compressed_blocks = &this->map_ptr[headersize + this->n_blocks*sizeof(uint16_t)];
-    }
-    
+    this->large_blocks = block_size > uint64_t(UINT16_MAX);
+    this->block_sizes_ptr = &this->map_ptr[headersize];
+    this->compressed_blocks = &this->map_ptr[headersize + this->n_blocks * (large_blocks ? sizeof(uint32_t) : sizeof(uint16_t))];
 
-    this->block_offsets = (uint64_t*) malloc(this->n_blocks * sizeof(uint64_t));
+    uint64_t n_sparse = n_blocks / OFFSET_STRIDE + (n_blocks % OFFSET_STRIDE != 0);
+    this->sparse_block_offsets = (uint64_t*) malloc(n_sparse * sizeof(uint64_t));
     uint64_t offset = 0;
     for (uint64_t block_ix = 0; block_ix < this->n_blocks; block_ix++) {
-      this->block_offsets[block_ix] = offset;
-      offset += this->block_sizes[block_ix];
+      if (block_ix % OFFSET_STRIDE == 0) this->sparse_block_offsets[block_ix / OFFSET_STRIDE] = offset;
+      offset += this->get_block_size(block_ix);
     }
 
     decompress_ctx = nullptr;
@@ -133,9 +129,20 @@ struct CompressedTB {
         perror(("Error munmapping the file " + this->compressed_filename).c_str());
         exit(EXIT_FAILURE);
     }
-    free(this->block_sizes);
-    free(this->block_offsets);
+    free(this->sparse_block_offsets);
     if (decompress_ctx != nullptr) delete decompress_ctx;
+  }
+
+  // size of compressed block in bytes
+  inline uint64_t get_block_size(uint64_t block_ix) const {
+    return large_blocks ? ((uint32_t*) block_sizes_ptr)[block_ix] : ((uint16_t*) block_sizes_ptr)[block_ix];
+  }
+
+  // offset of compressed block in compressed_blocks
+  inline uint64_t get_block_offset(uint64_t block_ix) const {
+    uint64_t offset = sparse_block_offsets[block_ix / OFFSET_STRIDE];
+    for (uint64_t i = block_ix - block_ix % OFFSET_STRIDE; i < block_ix; i++) offset += get_block_size(i);
+    return offset;
   }
 
   // not thread-safe
@@ -154,15 +161,15 @@ struct CompressedTB {
 
     uint64_t block_ix = ix / block_size;
     uint64_t ix_in_block = ix % block_size;
-    uint64_t offset = block_offsets[block_ix];
-    uint64_t size = std::min(block_size, num_pos - block_ix*block_size) * sizeof(int16_t);
 
     if (dctx->egtb_ix != egtb_ix || dctx->uncompressed_block_ix != block_ix) {
       dctx->egtb_ix = egtb_ix; // DecompressCtx may be shared across CompressTB
       dctx->uncompressed_block_ix = block_ix;
+      uint64_t offset = get_block_offset(block_ix);
+      uint64_t size = std::min(block_size, num_pos - block_ix*block_size) * sizeof(int16_t);
       size_t res = ZSTD_decompressDCtx(dctx->decompressor,
         dctx->uncompressed_buf, size,
-        &compressed_blocks[offset], block_sizes[block_ix]);
+        &compressed_blocks[offset], get_block_size(block_ix));
       assert (!ZSTD_isError(res));
     }
     return dctx->uncompressed_buf[ix_in_block];
@@ -177,11 +184,11 @@ struct CompressedTB {
       #pragma omp for schedule(static)
       for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
         uint64_t block_ix = start_ix / block_size;
-        uint64_t offset = block_offsets[block_ix];
+        uint64_t offset = get_block_offset(block_ix);
         uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
         size_t res = ZSTD_decompressDCtx(dctx->decompressor,
           &TB[start_ix], size,
-          &compressed_blocks[offset], block_sizes[block_ix]);
+          &compressed_blocks[offset], get_block_size(block_ix));
         assert (!ZSTD_isError(res));
       }
 
@@ -205,11 +212,11 @@ struct CompressedTB {
     assert (decompress_ctx->buf_size >= block_size);
     for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
         uint64_t block_ix = start_ix / block_size;
-        uint64_t offset = block_offsets[block_ix];
+        uint64_t offset = get_block_offset(block_ix);
         uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
         size_t res = ZSTD_decompressDCtx(decompress_ctx->decompressor,
             decompress_ctx->uncompressed_buf, size,
-            &compressed_blocks[offset], block_sizes[block_ix]);
+            &compressed_blocks[offset], get_block_size(block_ix));
         assert (!ZSTD_isError(res));
         fwrite(decompress_ctx->uncompressed_buf, sizeof(uint8_t), size, f);
     }

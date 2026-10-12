@@ -110,7 +110,7 @@ struct EGTB {
             exit(EXIT_FAILURE);
         }
     }
-    int16_t query_postion(EGPosition const pos) {
+    int16_t query_postion(EGPosition const &pos) {
         return this->get_value(this->ix_from_pos(pos));
     }
 
@@ -126,7 +126,7 @@ struct EGTB {
         }
     }
     // thread-safe
-    int16_t query_postion_dctx(EGPosition const pos, DecompressCtx* dctx) {
+    int16_t query_postion_dctx(EGPosition const &pos, DecompressCtx* dctx) {
         return this->get_value_dctx(this->ix_from_pos(pos), dctx);
     }
 

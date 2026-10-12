@@ -23,11 +23,11 @@ bool CompressedTB::check_integrity([[maybe_unused]] int nthreads) {
     #pragma omp for schedule(static)
     for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
       uint64_t block_ix = start_ix / block_size;
-      uint64_t offset = block_offsets[block_ix];
+      uint64_t offset = get_block_offset(block_ix);
       uint64_t block_npos = std::min(block_size, num_pos - start_ix);
       size_t res = ZSTD_decompressDCtx(dctx->decompressor,
         dctx->uncompressed_buf, block_npos * sizeof(int16_t),
-        &compressed_blocks[offset], block_sizes[block_ix]);
+        &compressed_blocks[offset], get_block_size(block_ix));
       assert (!ZSTD_isError(res));
 
       for (uint64_t ix = start_ix; ix < start_ix + block_npos; ix++) {
