@@ -313,6 +313,80 @@ void bench_decoder(const std::string& egtb_id) {
         egtb_id.c_str(), old_rnd, old_seq, new_rnd, new_seq, (unsigned long) (sink & 1));
 }
 
+// the file index of every digit order is a permutation of each king pair slice
+uint64_t check_digit_orders(const std::string& egtb_id) {
+    EGTB egtb("unused", egtb_id);
+    uint64_t n_bad = 0;
+    int n_kk = egtb.npawns == 0 ? N_KKX : N_KKP;
+    // radices of the slots multiply to the slice sizes
+    for (int kix = 0; kix < n_kk; kix++) {
+        uint64_t radix[N_DIGIT_SLOTS], product = 1;
+        slice_radices(egtb.stm_pieces, egtb.sntm_pieces, kix, radix);
+        for (int s = 0; s < N_DIGIT_SLOTS; s++) product *= radix[s];
+        n_bad += product != egtb.kntm_poscounts[kix + 1] - egtb.kntm_poscounts[kix];
+    }
+    for (const std::vector<int>& order : all_digit_orders(egtb.stm_pieces, egtb.sntm_pieces)) {
+        std::vector<int> unpacked;
+        n_bad += !unpack_digit_order(pack_digit_order(order), egtb.stm_pieces, egtb.sntm_pieces, unpacked) || unpacked != order;
+        std::vector<char> seen(egtb.num_pos, 0);
+        #pragma omp parallel reduction(+:n_bad)
+        {
+            DigitCursor cursor(egtb.stm_pieces, egtb.sntm_pieces, egtb.kntm_poscounts, egtb.num_nonep_pos, order);
+            #pragma omp for schedule(static, 65536)
+            for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
+                uint64_t file_ix = cursor.to_file(ix);
+                n_bad += file_ix >= egtb.num_pos || cursor.to_canonical(file_ix) != ix;
+                if (file_ix < egtb.num_pos) seen[file_ix] = 1; // races only write 1
+                if (ix >= egtb.num_nonep_pos) n_bad += file_ix != ix; // en-passant section is not permuted
+            }
+        }
+        for (char c : seen) n_bad += c == 0;
+    }
+    // invalid orders are rejected
+    std::vector<int> slots;
+    std::vector<int> canonical = nonempty_slots(egtb.stm_pieces, egtb.sntm_pieces);
+    std::vector<int> wrong = canonical;
+    wrong.push_back(canonical.back() == 9 ? 0 : 9);
+    n_bad += unpack_digit_order(pack_digit_order(wrong), egtb.stm_pieces, egtb.sntm_pieces, slots);
+    return n_bad;
+}
+
+void test_digit_order(const std::string& scratch) {
+    uint64_t n_bad = 0;
+    for (std::string egtb_id : get_egtb_identifiers(1, 2)) n_bad += check_digit_orders(egtb_id);
+    for (std::string egtb_id : {"KNPKB", "KPPKP", "KQRKR", "KBBKN"}) {
+        uint64_t n = check_digit_orders(egtb_id);
+        if (n) std::cout << egtb_id << ": " << n << " bad" << std::endl;
+        n_bad += n;
+    }
+    CHECK(n_bad == 0);
+
+    // the digit order is stored in the header and kept by recompress
+    std::vector<int16_t> TB = make_table(100000, 5);
+    std::vector<int> order = {5, 3, 6}; // some order of three slots
+    uint64_t packed = pack_digit_order(order);
+    std::string filename = scratch + "/digit_order" + COMP_EXT;
+    std::string filename2 = scratch + "/digit_order2" + COMP_EXT;
+    block_compress_TB(TB.data(), TB.size(), 4, 3, 32768, filename, true, false, packed);
+    {
+        CompressedTB ctb(0, filename);
+        CHECK(ctb.digit_order == packed);
+        CHECK(ctb.flags & FLAG_DIGIT_ORDER);
+        CHECK(ctb.check_integrity(4));
+    }
+    recompress_TB(filename, filename2, 4, 3, 1024, false);
+    {
+        CompressedTB ctb(0, filename2);
+        CHECK(ctb.digit_order == packed);
+        std::vector<int16_t> D(TB.size());
+        ctb.decompress_to_array(4, D.data());
+        CHECK(D == TB);
+    }
+    fs::remove(filename);
+    fs::remove(filename2);
+    std::cout << "test_digit_order done" << std::endl;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         std::cerr << "usage: unit_tests.out [scratch_folder] (optional: [reference_root])" << std::endl;
@@ -332,6 +406,7 @@ int main(int argc, char *argv[]) {
     if (argc > 2) test_v1(scratch, argv[2]);
     test_fast_tril();
     test_decoder();
+    test_digit_order(scratch);
     for (std::string egtb_id : {"KNPKB", "KPPKP", "KQRKR", "KRPKRP", "KQRBKN"}) bench_decoder(egtb_id);
 
     std::cout << (n_failed == 0 ? "All unit tests passed." : "Some unit tests FAILED.") << std::endl;

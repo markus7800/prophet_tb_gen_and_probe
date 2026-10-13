@@ -671,6 +671,11 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
             // query from compressed file
             PROMO_EGTB->init_compressed_tb();
             assert (PROMO_EGTB->CTB->block_size == BLOCKSIZE);
+            if (PROMO_EGTB->file_permuted) {
+                // reading a finalized file in canonical index order would decompress a block for almost every value
+                std::cerr << PROMO_EGTB->id << " is finalized (digit order changed), generation needs the original file." << std::endl;
+                exit(1);
+            }
             std::cout << "Retrograde from color=" << ((COLOR == WHITE) ? "W" : "B") << ", promotion=" << PieceToChar[promote_pt] << ", " << PROMO_EGTB->id << " with #positions=" << PROMO_EGTB->num_pos << std::endl;
 
             int N_SYMMETRIES = PROMO_EGTB->npawns > 0 ? 2 : 8; // symmetries of 

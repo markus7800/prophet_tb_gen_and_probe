@@ -95,6 +95,14 @@ void EGTB::init_compressed_tb() {
             this->get_filename() + COMP_EXT
         );
         this->compressed = true;
+        this->file_permuted = false;
+        if (this->CTB->digit_order != 0) {
+            if (!unpack_digit_order(this->CTB->digit_order, stm_pieces, sntm_pieces, file_slots)) {
+                std::cerr << "Invalid digit order in " << this->get_filename() + COMP_EXT << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            this->file_permuted = !DigitCursor(stm_pieces, sntm_pieces, kntm_poscounts, num_nonep_pos, file_slots).identity;
+        }
     }
 }
 
@@ -104,7 +112,33 @@ void EGTB::load_egtb_from_compressed_file(int nthreads) {
     assert (!this->loaded);
     assert (this->TB == nullptr);
     this->TB = (int16_t*) calloc(this->num_pos, sizeof(int16_t));
-    this->CTB->decompress_to_array(nthreads, TB);
+    if (!this->file_permuted) {
+        this->CTB->decompress_to_array(nthreads, TB);
+    } else {
+        // values are stored in file index order: decompress every block and move the values to their canonical index
+        CompressedTB* ctb = this->CTB;
+        uint64_t checksum = 0;
+        bool corrupt = false;
+        #pragma omp parallel num_threads(nthreads) reduction(+:checksum) reduction(||:corrupt)
+        {
+            DecompressCtx dctx(ctb->block_size);
+            DigitCursor cursor(stm_pieces, sntm_pieces, kntm_poscounts, num_nonep_pos, file_slots);
+            #pragma omp for schedule(static)
+            for (uint64_t block_ix = 0; block_ix < ctb->n_blocks; block_ix++) {
+                if (!ctb->decompress_block(block_ix, &dctx, dctx.uncompressed_buf)) { corrupt = true; continue; }
+                uint64_t start = block_ix * ctb->block_size;
+                for (uint64_t i = 0; i < ctb->get_block_npos(block_ix); i++) {
+                    int16_t v = dctx.uncompressed_buf[i];
+                    checksum += checksum_term(start + i, v); // checksum of the file (file index order)
+                    TB[cursor.to_canonical(start + i)] = v;
+                }
+            }
+        }
+        if (corrupt || checksum != ctb->checksum) {
+            std::cerr << "Corrupt file " << this->get_filename() + COMP_EXT << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
     
     this->mmaped = false;
     this->loaded = true;

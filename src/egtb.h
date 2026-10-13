@@ -10,6 +10,7 @@
 #include "types.h"
 #include "egtb_ids.h"
 #include "pos_decoder.h"
+#include "digit_order.h"
 #include <mutex>
 
 std::string get_default_folder(std::string root_folder, int stm_pieces_[6], int sntm_pieces_[6]);
@@ -34,6 +35,10 @@ struct EGTB {
     bool loaded;
 
     std::once_flag has_initialised_compressed_tb;
+
+    // digit order of the compressed file (finalized tables), values are read through file_ix
+    std::vector<int> file_slots;
+    bool file_permuted;
 
     // index layout for fast decoding (PosDecoder), created on first use
     IndexLayout* layout;
@@ -77,7 +82,15 @@ struct EGTB {
         compressed = false;
         TB = nullptr;
         CTB = nullptr;
+        file_permuted = false;
         layout = nullptr;
+    }
+
+    // index of the value of canonical index ix in the compressed file
+    uint64_t file_ix(uint64_t ix) const {
+        if (!file_permuted) return ix;
+        DigitCursor cursor(stm_pieces, sntm_pieces, kntm_poscounts, num_nonep_pos, file_slots);
+        return cursor.to_file(ix);
     }
 
     // thread-safe
@@ -119,7 +132,7 @@ struct EGTB {
         if (loaded) {
             return this->TB[ix];
         } else if (compressed) {
-            return this->CTB->get_value(ix);
+            return this->CTB->get_value(file_ix(ix));
         } else {
             perror(("Tried to get value on unloaded EGTB " + this->id).c_str());
             exit(EXIT_FAILURE);
@@ -134,7 +147,7 @@ struct EGTB {
         if (loaded) {
             return this->TB[ix];
         } else if (compressed) {
-            return this->CTB->get_value_dctx(ix, dctx);
+            return this->CTB->get_value_dctx(file_ix(ix), dctx);
         } else {
             perror(("Tried to get value on unloaded EGTB " + this->id).c_str());
             exit(EXIT_FAILURE);
@@ -175,6 +188,7 @@ struct EGTB {
             delete CTB;
             CTB = nullptr;
             compressed = false;
+            file_permuted = false;
         }
     }
     void ensure_compressed_tb_initialised() {

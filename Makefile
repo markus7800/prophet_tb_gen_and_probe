@@ -38,7 +38,7 @@ endif
 
 prophet: flags += -fPIC
 
-.PHONY: lib gen mates compress recompress prophet check test compare unittest clean
+.PHONY: lib gen mates compress recompress prophet check test compare unittest finalize clean
 
 build:
 	mkdir -p build
@@ -56,10 +56,11 @@ lib: | build
 	$(CC) -g $(flags) -c -o build/kkx.o src/kkx.cpp
 	$(CC) -g $(flags) -c -o build/linearize.o src/linearize.cpp
 	$(CC) -g $(flags) -c -o build/pos_decoder.o src/pos_decoder.cpp
+	$(CC) -g $(flags) -c -o build/digit_order.o src/digit_order.cpp
 	$(CC) -g $(flags) -c -o build/triangular_indexes.o src/triangular_indexes.cpp
 	$(CC) -g $(flags) -c -o build/uci.o src/uci.cpp
 
-corefiles = build/bitboard.o build/compressed_tb.o build/eg_movegen.o build/eg_position.o build/egtb.o build/egtb_ids.o build/kkx.o build/linearize.o build/pos_decoder.o build/triangular_indexes.o build/uci.o
+corefiles = build/bitboard.o build/compressed_tb.o build/eg_movegen.o build/eg_position.o build/egtb.o build/egtb_ids.o build/kkx.o build/linearize.o build/pos_decoder.o build/digit_order.o build/triangular_indexes.o build/uci.o
 
 gen: lib | build
 	$(CC) -g $(flags) -o build/gen_main.out src/gen_main.cpp $(corefiles) $(lzstd)
@@ -86,6 +87,9 @@ test: | build
 
 compare: | build
 	$(CC) -g $(flags) -o build/compare_tables.out src/compare_tables.cpp src/legacy_v1.cpp $(lprophet) $(lzstd)
+
+finalize: | build
+	$(CC) -g $(flags) -o build/finalize.out src/finalize.cpp $(lprophet) $(lzstd)
 
 unittest: | build
 	$(CC) -g $(flags) -o build/unit_tests.out src/unit_tests.cpp src/legacy_v1.cpp $(lprophet) $(lzstd)

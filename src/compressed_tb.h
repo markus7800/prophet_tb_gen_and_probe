@@ -14,6 +14,7 @@
 #include <sys/stat.h> // file size
 #include <cstdint>
 #include <stdio.h>
+#include <functional>
 
 
 #define COMP_EXT ".bz"
@@ -27,10 +28,12 @@ header_size UINT64 = number of bytes before BLOCK_SIZES (56, later versions may 
 checksum UINT64 (see compute_checksum)
 num_pos UINT64
 block_size UINT64
-flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE)
+flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE, FLAG_DIGIT_ORDER)
 if flags & FLAG_RANK_ENCODED:
   dict_size UINT64 (number of values in the dictionary, at most 256, at most 255 if FLAG_ESCAPE)
   dict_size * INT16 dictionary values, zero-padded to a multiple of 8 bytes
+if flags & FLAG_DIGIT_ORDER:
+  digit_order UINT64 (order of the piece groups in the index of the file, see digit_order.h; written by finalize)
 
 BLOCK_SIZES
 if block_size > 65535:
@@ -55,6 +58,7 @@ Its checksum is the XOR of (ix << 10) | abs(value), see compute_checksum_v1.
 #define COMP_MAGIC 0x32425448504F5250ULL // bytes "PROPHTB2" read as little-endian uint64
 #define FLAG_RANK_ENCODED 1
 #define FLAG_ESCAPE 2
+#define FLAG_DIGIT_ORDER 4
 // maximal number of codes (dictionary values + escape code); lower values can be set at compile time to test the escape path
 #ifndef EGTB_MAX_DICT
 #define EGTB_MAX_DICT 256
@@ -105,7 +109,18 @@ uint64_t encode_block(const int16_t* values, uint64_t n, const int16_t* code_of,
 // decodes a payload of n entries, returns false if the payload is inconsistent
 bool decode_block(const uint8_t* payload, uint64_t payload_size, uint64_t n, const ValueDict& dict, int16_t* values);
 
-uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
+// dictionary from value frequencies counts[(uint16_t) value]
+void value_dict_from_counts(const uint64_t* counts, ValueDict& dict);
+
+// compresses TB to compressed_filename (TB is not modified), returns compressed size
+// digit_order != 0 is stored in the header (FLAG_DIGIT_ORDER), the values are written as they are
+uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0);
+
+// writes the values of a table that is never fully in memory: fill(start_ix, n, out) has to write the values of
+// [start_ix, start_ix + n) to out; it is called twice for every chunk of chunk_size values (a multiple of block_size),
+// concurrently from nthreads threads (for different chunks)
+typedef std::function<void(uint64_t start_ix, uint64_t n, int16_t* out)> ValueFill;
+uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const ValueFill& fill, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0);
 
 // parses a header of version 1 or 2 from the first n bytes of a file, returns false if invalid
 bool parse_compressed_header(const uint8_t* data, uint64_t n, CompressedHeader& header);
@@ -115,6 +130,8 @@ bool read_compressed_header(std::string compressed_filename, uint64_t& checksum,
 // parses the value dictionary that follows the fixed header (header_size bytes of data have to be available)
 // for files without FLAG_RANK_ENCODED the dictionary is empty
 bool parse_value_dict(const uint8_t* data, uint64_t n, const CompressedHeader& header, ValueDict& dict);
+// parses the digit order that follows the dictionary (0 if the file has none)
+bool parse_digit_order(const uint8_t* data, uint64_t n, const CompressedHeader& header, uint64_t& digit_order);
 // checks that compressed file is not truncated, i.e. header, block sizes and all blocks are present
 bool is_complete_compressed_file(std::string compressed_filename);
 // decompresses source and block-compresses it with block_size to target (source == target is allowed)
@@ -165,6 +182,7 @@ struct CompressedTB {
   uint8_t* compressed_blocks;
   DecompressCtx* decompress_ctx;
   ValueDict dict; // only used if flags & FLAG_RANK_ENCODED
+  uint64_t digit_order; // 0 if the index of the file has the canonical digit order
 
   CompressedTB(int egtb_ix_, std::string filename) {
     // std::cout << "CompressedEGTB " << this << ": " << filename << std::endl;
@@ -193,7 +211,8 @@ struct CompressedTB {
         exit(EXIT_FAILURE);
     }
     uint64_t headersize = header.header_size;
-    if (headersize > this->compressed_filesize || !parse_value_dict(this->map_ptr, headersize, header, this->dict)) {
+    if (headersize > this->compressed_filesize || !parse_value_dict(this->map_ptr, headersize, header, this->dict) ||
+        !parse_digit_order(this->map_ptr, headersize, header, this->digit_order)) {
         printf("Invalid header in file %s.\n", this->compressed_filename.c_str());
         exit(EXIT_FAILURE);
     }
