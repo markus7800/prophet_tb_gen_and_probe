@@ -25,6 +25,10 @@ endif
 ifdef ZSTD_LEVEL
 	flags += -DEGTB_COMPRESSION_LEVEL=$(ZSTD_LEVEL)
 endif
+ifdef GEN_WINDOW
+	# number of levels with exact values during generation with 1 byte per position (lower values only for testing)
+	flags += -DGEN_WINDOW=$(GEN_WINDOW)
+endif
 ifdef RETRO_PROMO_MIN_PIECES
 	flags += -DRETRO_PROMO_MIN_PIECES=$(RETRO_PROMO_MIN_PIECES)
 endif

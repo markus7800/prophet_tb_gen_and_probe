@@ -14,6 +14,7 @@
 #include <sys/stat.h> // file size
 #include <cstdint>
 #include <stdio.h>
+#include <functional>
 
 
 #define COMP_EXT ".bz"
@@ -105,7 +106,17 @@ uint64_t encode_block(const int16_t* values, uint64_t n, const int16_t* code_of,
 // decodes a payload of n entries, returns false if the payload is inconsistent
 bool decode_block(const uint8_t* payload, uint64_t payload_size, uint64_t n, const ValueDict& dict, int16_t* values);
 
+// dictionary from value frequencies counts[(uint16_t) value]
+void value_dict_from_counts(const uint64_t* counts, ValueDict& dict);
+
+// compresses TB to compressed_filename (TB is not modified), returns compressed size
 uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
+
+// writes the values of a table that is never fully in memory: fill(start_ix, n, out) has to write the values of
+// [start_ix, start_ix + n) to out; it is called twice for every chunk of chunk_size values (a multiple of block_size),
+// concurrently from nthreads threads (for different chunks)
+typedef std::function<void(uint64_t start_ix, uint64_t n, int16_t* out)> ValueFill;
+uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const ValueFill& fill, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
 
 // parses a header of version 1 or 2 from the first n bytes of a file, returns false if invalid
 bool parse_compressed_header(const uint8_t* data, uint64_t n, CompressedHeader& header);
