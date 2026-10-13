@@ -26,6 +26,11 @@
 #define BLOCKSIZE 32768
 #endif
 static_assert(BLOCKSIZE % 8 == 0, "BLOCKSIZE must be divisible by 8");
+// tables with at least this many pieces do not load promotion tables into memory, but retrograde from the
+// compressed promotion tables (and check consistency from compressed files); lower it to test this code path
+#ifndef RETRO_PROMO_MIN_PIECES
+#define RETRO_PROMO_MIN_PIECES 6
+#endif
 static_assert(1 <= COMPRESSION_LEVEL && COMPRESSION_LEVEL <= 22, "COMPRESSION_LEVEL must be in [1, 22]");
 
 int main(int argc, char *argv[]) {
@@ -65,7 +70,7 @@ int main(int argc, char *argv[]) {
         count++;
         std::cout << count << ". " << egtb.id << std::endl;
         if (generate_missing && !egtb.exists()) {
-            bool disable_allocate_promotion_tb = (egtb.npieces == 6);
+            bool disable_allocate_promotion_tb = (egtb.npieces >= RETRO_PROMO_MIN_PIECES);
 
             GenEGTB g = GenEGTB(
                 egtb.stm_pieces, egtb.sntm_pieces, folder,

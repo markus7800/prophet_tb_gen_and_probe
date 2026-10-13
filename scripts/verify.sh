@@ -46,6 +46,7 @@ echo "== timings (summed over all tables)"
 awk '
     /^Finished allocate and load in/      { load += $(NF) + 0 }
     /^Finished init in/                   { init += $(NF) + 0 }
+    /^Finished retrograde from promotion/ { promo += $(NF) + 0 }
     /^Finished retrograde in/             { retro += $(NF) + 0; written = 0; pending = 0 }
     /^Finished in-memory consistency/     { check += $(NF) + 0; if (!written) pending += $(NF) + 0 }
     /^Wrote to disk in/                   { write += $(NF) - pending; written = 1 }
@@ -54,6 +55,7 @@ awk '
         printf "tables generated:   %d\n", n
         printf "allocate+load:      %8.1fs\n", load
         printf "init:               %8.1fs\n", init
+        printf "  of which promotion retrograde: %.1fs\n", promo
         printf "retrograde:         %8.1fs\n", retro
         printf "compress+write:     %8.1fs\n", write
         printf "consistency checks: %8.1fs\n", check

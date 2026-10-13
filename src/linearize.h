@@ -16,5 +16,7 @@ uint64_t ix_from_pos_(EGPosition const &pos, const uint64_t kntm_poscounts[]);
 void transform_to_canoncial(const EGPosition &pos, EGPosition &pos2);
 
 void transform_to(const EGPosition &pos, EGPosition &pos2, int8_t h_flip, int8_t v_flip, int8_t swap);
+// squares that transform_to with the same arguments maps into target
+Bitboard transform_preimage_bb(Bitboard target, int8_t h_flip, int8_t v_flip, int8_t swap);
 
 #endif

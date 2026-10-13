@@ -25,6 +25,9 @@ endif
 ifdef ZSTD_LEVEL
 	flags += -DEGTB_COMPRESSION_LEVEL=$(ZSTD_LEVEL)
 endif
+ifdef RETRO_PROMO_MIN_PIECES
+	flags += -DRETRO_PROMO_MIN_PIECES=$(RETRO_PROMO_MIN_PIECES)
+endif
 ifdef MAX_DICT
 	# only for testing the escape code path of the rank encoding
 	flags += -DEGTB_MAX_DICT=$(MAX_DICT)

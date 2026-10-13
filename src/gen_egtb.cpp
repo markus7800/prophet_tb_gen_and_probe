@@ -670,6 +670,14 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
 
             int N_SYMMETRIES = PROMO_EGTB->npawns > 0 ? 2 : 8; // symmetries of 
 
+            // a symmetry can only lead to un-promotions if it maps a promoted piece onto the promotion rank
+            // of the promoting side (~COLOR), to_promotion_rank[t] are the squares that symmetry t maps onto that rank
+            Bitboard promotion_rank = (~COLOR == WHITE) ? Rank8BB : Rank1BB;
+            Bitboard to_promotion_rank[8];
+            for (int t = 0; t < N_SYMMETRIES; t++) {
+                to_promotion_rank[t] = transform_preimage_bb(promotion_rank, H_FLIPS[t], V_FLIPS[t], SWAPS[t]);
+            }
+
             #pragma omp parallel num_threads(nthreads)
             {
                 DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE);
@@ -688,8 +696,10 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
                     if (val == 0 && !PROMO_EGTB->pos_ix_is_used(pos,ix)) continue;
 
                     int16_t lb = VAL_TO_LOWERBOUND(-val);
+                    Bitboard promoted_pieces = pos.pieces(~COLOR, promote_pt);
 
                     for (int t = 0; t < N_SYMMETRIES; t++) {
+                        if (!(promoted_pieces & to_promotion_rank[t])) continue;
                         transformed_pos.reset();
                         transform_to(pos, transformed_pos, H_FLIPS[t], V_FLIPS[t], SWAPS[t]);
 
@@ -756,7 +766,9 @@ void GenEGTB::gen(int nthreads) {
     // Step 1. Get all infos from dependent tables.
 
     if (!all_tb_dependencies_loaded) {
+        TimePoint tp0 = now();
         retrograde_promotion_tbs(nthreads);
+        std::cout << "Finished retrograde from promotion tables in " << (double) (now() - tp0) / 1000.0 << "s." << std::endl;
     }
 
     for (int wtm = 0; wtm <= 1; ++wtm) {

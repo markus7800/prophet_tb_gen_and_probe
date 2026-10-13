@@ -491,3 +491,11 @@ void transform_to(const EGPosition &pos, EGPosition &pos2, int8_t h_flip, int8_t
     pos2.set_side_to_move(pos.side_to_move());
 
 }
+
+Bitboard transform_preimage_bb(Bitboard target, int8_t h_flip, int8_t v_flip, int8_t swap) {
+    Bitboard preimage = 0;
+    for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
+        if (target & transform(sq, h_flip ^ v_flip, swap)) preimage |= square_bb(sq);
+    }
+    return preimage;
+}
