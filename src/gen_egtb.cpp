@@ -918,13 +918,21 @@ void GenEGTB::gen(int nthreads) {
                     LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
                     assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
 
+                    // first compute all target indices and prefetch them, then update (hides memory latency)
+                    uint64_t win_ixs[MAX_MOVES];
+                    int n_win_ixs = 0;
                     for (UndoInfo rev_move : EGUndoInfoList(pos)) {
                         pos.do_rev_move(rev_move);
                         uint64_t win_ix = WIN_EGTB->ix_from_pos(pos);
+                        __builtin_prefetch(&WIN_EGTB->TB[win_ix], 1);
+                        win_ixs[n_win_ixs++] = win_ix;
+                        pos.undo_rev_move(rev_move);
+                    }
+                    for (int i = 0; i < n_win_ixs; i++) {
+                        uint64_t win_ix = win_ixs[i];
                         if (!IS_SET(WIN_EGTB->TB[win_ix]) || WIN_EGTB->TB[win_ix] < WIN_IN(LEVEL) ) {
                             WIN_EGTB->TB[win_ix] = WIN_IN(LEVEL);
                         }
-                        pos.undo_rev_move(rev_move);
                     }
                 }
             }
@@ -940,9 +948,18 @@ void GenEGTB::gen(int nthreads) {
                     assert (WIN_EGTB->pos_ix_is_used(pos,win_ix));
                     N_LEVEL_POS++;
 
+                    // first compute all target indices and prefetch them, then update (hides memory latency)
+                    uint64_t maybe_loss_ixs[MAX_MOVES];
+                    int n_maybe_loss_ixs = 0;
                     for (UndoInfo rev_move : EGUndoInfoList(pos)) {
                         pos.do_rev_move(rev_move);
                         uint64_t maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
+                        __builtin_prefetch(&LOSS_EGTB->TB[maybe_loss_ix], 1);
+                        maybe_loss_ixs[n_maybe_loss_ixs++] = maybe_loss_ix;
+                        pos.undo_rev_move(rev_move);
+                    }
+                    for (int i = 0; i < n_maybe_loss_ixs; i++) {
+                        uint64_t maybe_loss_ix = maybe_loss_ixs[i];
                         if (!IS_SET(LOSS_EGTB->TB[maybe_loss_ix])) {
                             if (LOSS_EGTB->TB[maybe_loss_ix] == UNKNOWN) {
                                 LOSS_EGTB->TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
@@ -957,8 +974,6 @@ void GenEGTB::gen(int nthreads) {
                                 // SOME_LEVEL < LEVEL + 1 cannot happen as all such positions had to be considered previous iterations
                             }
                         }
-                        
-                        pos.undo_rev_move(rev_move);
                     }
                 }
             }            
