@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
         #pragma omp critical
         {
             count++;
-            std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_id << (ok ? " OK" : " ERROR") << std::endl;
+            std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_id << (ok ? " OK" : " ERROR") << " (v" << egtb.CTB->version << ")" << std::endl;
         }
 
     }

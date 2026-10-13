@@ -18,12 +18,16 @@
 
 #define COMP_EXT ".bz"
 /*
-.bz FORMAT:
+.bz FORMAT (version 2):
 
-HEADER 3 x UINT64 = 24 bytes
-checksum UINT64
+HEADER 7 x UINT64 = 56 bytes
+magic UINT64 = "PROPHTB2"
+version UINT64 = 2
+header_size UINT64 = number of bytes before BLOCK_SIZES (56, later versions may append fields)
+checksum UINT64 (see compute_checksum)
 num_pos UINT64
 block_size UINT64
+flags UINT64 (currently 0)
 
 BLOCK_SIZES
 if block_size > 65535:
@@ -34,13 +38,49 @@ where  n_blocks = ceil((double) num_pos / block_size);
 
 COMPRESSED DATA
 individual compressed blocks concatenated at byte level
-*/ 
 
+Legacy version 1 (read-only) has no magic and a 3 x UINT64 header: checksum, num_pos, block_size.
+Its checksum is the XOR of (ix << 10) | abs(value), see compute_checksum_v1.
+*/
 
-uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nthreads);
+#define COMP_MAGIC 0x32425448504F5250ULL // bytes "PROPHTB2" read as little-endian uint64
+#define COMP_VERSION 2
+#define COMP_V1_HEADER_SIZE (3 * sizeof(uint64_t))
+#define COMP_V2_HEADER_SIZE (7 * sizeof(uint64_t))
+
+struct CompressedHeader {
+  uint64_t version;
+  uint64_t header_size; // bytes before the block size table
+  uint64_t checksum;
+  uint64_t num_pos;
+  uint64_t block_size;
+  uint64_t flags;
+};
+
+// checksum contribution of one entry: position and value are mixed, so that sign flips, swapped values and
+// values in wrong positions are detected; the checksum is the sum (mod 2^64) over all entries
+inline uint64_t checksum_term(uint64_t ix, int16_t val) {
+  uint64_t z = (ix << 16) | (uint16_t) val;
+  z += 0x9e3779b97f4a7c15ULL;
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  return z ^ (z >> 31);
+}
+inline uint64_t checksum_term_v1(uint64_t ix, int16_t val) {
+  return (ix << 10) | ((uint64_t) abs(val));
+}
+
+uint64_t compute_checksum(const int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nthreads);
+uint64_t compute_checksum_v1(const int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nthreads);
+// checksum of the given file format version
+uint64_t compute_checksum_version(uint64_t version, const int16_t* TB, uint64_t num_pos, int nthreads);
+
 uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
 
-// reads header of compressed file, returns false if file cannot be read or is too small
+// parses a header of version 1 or 2 from the first n bytes of a file, returns false if invalid
+bool parse_compressed_header(const uint8_t* data, uint64_t n, CompressedHeader& header);
+// reads header of compressed file, returns false if file cannot be read or is invalid
+bool read_compressed_header(std::string compressed_filename, CompressedHeader& header);
 bool read_compressed_header(std::string compressed_filename, uint64_t& checksum, uint64_t& num_pos, uint64_t& block_size);
 // checks that compressed file is not truncated, i.e. header, block sizes and all blocks are present
 bool is_complete_compressed_file(std::string compressed_filename);
@@ -76,6 +116,8 @@ struct CompressedTB {
   int egtb_ix;
   std::string compressed_filename;
   uint64_t compressed_filesize;
+  uint64_t version;
+  uint64_t flags;
   uint64_t checksum;
   uint64_t num_pos;
   uint64_t block_size;
@@ -108,10 +150,17 @@ struct CompressedTB {
     }
     close(fd);
 
-    int headersize = 3*sizeof(uint64_t);
-    this->checksum = ((uint64_t*) this->map_ptr)[0];
-    this->num_pos = ((uint64_t*) this->map_ptr)[1];
-    this->block_size = ((uint64_t*) this->map_ptr)[2];
+    CompressedHeader header;
+    if (!parse_compressed_header(this->map_ptr, this->compressed_filesize, header)) {
+        printf("Invalid header in file %s.\n", this->compressed_filename.c_str());
+        exit(EXIT_FAILURE);
+    }
+    uint64_t headersize = header.header_size;
+    this->version = header.version;
+    this->flags = header.flags;
+    this->checksum = header.checksum;
+    this->num_pos = header.num_pos;
+    this->block_size = header.block_size;
     this->n_blocks = ceil((double) num_pos / block_size);
     
     this->large_blocks = block_size > uint64_t(UINT16_MAX);
@@ -206,7 +255,15 @@ struct CompressedTB {
       }
     }
 
-    assert (compute_checksum(TB, num_pos, nthreads) == checksum);
+    if (!verify_checksum(TB, nthreads)) {
+      std::cerr << "Checksum mismatch after decompressing " << compressed_filename << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  // checksum of a decompressed table, computed with the checksum of this file's version
+  bool verify_checksum(const int16_t* TB, int nthreads) const {
+    return compute_checksum_version(version, TB, num_pos, nthreads) == checksum;
   }
 
   void decompress_to_file(std::string filename) {
