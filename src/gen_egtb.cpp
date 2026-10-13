@@ -377,42 +377,46 @@ void GenEGTB::check_consistency_allocated(int nthreads) {
             CAPTURE_EGTBs = WTM_EGTBs;
         }
 
-        #pragma omp parallel for num_threads(nthreads) schedule(static,CHUNKSIZE)
-        for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
-            EGPosition pos;
-            pos.reset();
-            LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
+        const IndexLayout* loss_layout = LOSS_EGTB->get_layout();
+        #pragma omp parallel num_threads(nthreads)
+        {
+            PosDecoder decoder(loss_layout, LOSS_COLOR);
+            #pragma omp for schedule(static,CHUNKSIZE)
+            for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
+                EGPosition pos;
+                decoder.pos_at_ix(pos, ix);
 
-            int16_t tb_val = LOSS_EGTB->TB[ix];
-            if (!LOSS_EGTB->pos_ix_is_used(pos, ix)) {
-                assert (tb_val == 0); // || tb_val == UNUSED
-                continue;
-            }
+                int16_t tb_val = LOSS_EGTB->TB[ix];
+                if (!LOSS_EGTB->pos_ix_is_used(pos, ix)) {
+                    assert (tb_val == 0); // || tb_val == UNUSED
+                    continue;
+                }
 
-            EGMoveList movelist = EGMoveList(pos);
-            if (movelist.size() == 0) {
-                if (pos.stm_in_check()) {
-                    assert(tb_val == LOSS_IN(0));
+                EGMoveList movelist = EGMoveList(pos);
+                if (movelist.size() == 0) {
+                    if (pos.stm_in_check()) {
+                        assert(tb_val == LOSS_IN(0));
+                    } else {
+                        assert(tb_val == 0);
+                    }
+
                 } else {
-                    assert(tb_val == 0);
-                }
-
-            } else {
                 
-                int16_t max_val = LOSS_IN(0);
-                for (Move move : movelist) {
-                    UndoInfo u = pos.do_move(move);
-                    PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
-                    EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
-                    uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
-                    max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
-                    pos.undo_move(u);
+                    int16_t max_val = LOSS_IN(0);
+                    for (Move move : movelist) {
+                        UndoInfo u = pos.do_move(move);
+                        PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
+                        EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
+                        uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
+                        max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
+                        pos.undo_move(u);
+                    }
+
+                    if (max_val > 0) max_val--;
+                    if (max_val < 0) max_val++;
+
+                    assert(tb_val == max_val);
                 }
-
-                if (max_val > 0) max_val--;
-                if (max_val < 0) max_val++;
-
-                assert(tb_val == max_val);
             }
         }
     }
@@ -487,16 +491,17 @@ void GenEGTB::check_consistency_max_bytes_allocated(int nthreads, uint64_t max_b
 
             // BLOCKSIZE is divisible by 8 thus no race conditions on ix_m
             assert (BLOCKSIZE % 8 == 0);
+            const IndexLayout* loss_layout = LOSS_EGTB->get_layout();
             #pragma omp parallel num_threads(nthreads) 
             {
 
                 DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE);
+                PosDecoder decoder(loss_layout, LOSS_COLOR);
 
                 #pragma omp for schedule(static,BLOCKSIZE)
                 for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
                     EGPosition pos;
-                    pos.reset();
-                    LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
+                    decoder.pos_at_ix(pos, ix);
 
                     int16_t tb_val = LOSS_EGTB->get_value_dctx(ix, dctx);
 
@@ -678,17 +683,19 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
                 to_promotion_rank[t] = transform_preimage_bb(promotion_rank, H_FLIPS[t], V_FLIPS[t], SWAPS[t]);
             }
 
+            const IndexLayout* promo_layout = PROMO_EGTB->get_layout();
             #pragma omp parallel num_threads(nthreads)
             {
                 DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE);
             
+                PosDecoder decoder(promo_layout, COLOR);
+
                 #pragma omp for schedule(static, BLOCKSIZE)
                 for (uint64_t ix = 0; ix < PROMO_EGTB->num_nonep_pos; ix++) {
                     EGPosition pos;
                     EGPosition transformed_pos;
 
-                    pos.reset();
-                    PROMO_EGTB->pos_at_ix(pos, ix, COLOR);
+                    decoder.pos_at_ix(pos, ix);
 
                     int16_t val = PROMO_EGTB->get_value_dctx(ix, dctx);
 
@@ -788,101 +795,102 @@ void GenEGTB::gen(int nthreads) {
         uint64_t N_SYMMETRY = 0;
         uint64_t N_CHECKMATE = 0;
 
-        #pragma omp parallel for num_threads(nthreads) schedule(static,CHUNKSIZE) \
-        reduction(+:N_LEVEL_POS) reduction(+:N_SYMMETRY) reduction(+:N_SNTM_IN_CHECK) \
-        reduction(+:N_ILLEGAL_EP) reduction(+:N_PIECE_COLLISION) reduction(+:N_CHECKMATE) \
-        reduction(max:MIN_LEVEL)
-        for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
-            EGPosition pos;
-            pos.reset();
-            LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
+        const IndexLayout* loss_layout = LOSS_EGTB->get_layout();
+        #pragma omp parallel num_threads(nthreads)
+        {
+            PosDecoder decoder(loss_layout, LOSS_COLOR);
+            #pragma omp for schedule(static,CHUNKSIZE) reduction(+:N_LEVEL_POS) reduction(+:N_SYMMETRY) reduction(+:N_SNTM_IN_CHECK) reduction(+:N_ILLEGAL_EP) reduction(+:N_PIECE_COLLISION) reduction(+:N_CHECKMATE) reduction(max:MIN_LEVEL)
+            for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
+                EGPosition pos;
+                decoder.pos_at_ix(pos, ix);
 
-            if (popcount(pos.pieces()) != LOSS_EGTB->npieces) {
-                N_PIECE_COLLISION++;
-                LOSS_EGTB->TB[ix] = UNUSED;
-                continue;
-            } else if (pos.sntm_in_check()) {
-                N_SNTM_IN_CHECK++;
-                LOSS_EGTB->TB[ix] = UNUSED;
-                continue;
-            } else if ((ix >= LOSS_EGTB->num_nonep_pos) && !pos.check_ep(pos.ep_square())) {
-                N_ILLEGAL_EP++;
-                LOSS_EGTB->TB[ix] = UNUSED;
-                continue;
-            } else if (LOSS_EGTB->ix_from_pos(pos) != ix) {
-                N_SYMMETRY++;
-                LOSS_EGTB->TB[ix] = UNUSED;
-                continue;
-            } else if (!IS_LOWERBOUND(LOSS_EGTB->TB[ix])) {
-                // can have lower bound already from retrograde_promotion_tbs
-                LOSS_EGTB->TB[ix] = UNKNOWN;
-            }
-
-            EGMoveList movelist = EGMoveList(pos);
-            if (movelist.size() == 0) {
-                if (pos.stm_in_check()) {
-                    LOSS_EGTB->TB[ix] = LOSS_IN(0);
-                    N_CHECKMATE++;
-                    N_LEVEL_POS++;
-                } else {
-                    LOSS_EGTB->TB[ix] = 0; // stale mate
+                if (popcount(pos.pieces()) != LOSS_EGTB->npieces) {
+                    N_PIECE_COLLISION++;
+                    LOSS_EGTB->TB[ix] = UNUSED;
+                    continue;
+                } else if (pos.sntm_in_check()) {
+                    N_SNTM_IN_CHECK++;
+                    LOSS_EGTB->TB[ix] = UNUSED;
+                    continue;
+                } else if ((ix >= LOSS_EGTB->num_nonep_pos) && !pos.check_ep(pos.ep_square())) {
+                    N_ILLEGAL_EP++;
+                    LOSS_EGTB->TB[ix] = UNUSED;
+                    continue;
+                } else if (LOSS_EGTB->ix_from_pos(pos) != ix) {
+                    N_SYMMETRY++;
+                    LOSS_EGTB->TB[ix] = UNUSED;
+                    continue;
+                } else if (!IS_LOWERBOUND(LOSS_EGTB->TB[ix])) {
+                    // can have lower bound already from retrograde_promotion_tbs
+                    LOSS_EGTB->TB[ix] = UNKNOWN;
                 }
 
-            } else {
-                
-                // can have lower bound already from retrograde_promotion_tbs
-                int16_t max_val = IS_LOWERBOUND(LOSS_EGTB->TB[ix]) ? LOWERBOUND_TO_VAL(LOSS_EGTB->TB[ix]) : LOSS_IN(0);
-                // int16_t lb = LOWERBOUND_TO_VAL(LOSS_EGTB->TB[ix]);
-                // int16_t max_val_2 = LOSS_IN(0);
-
-                bool has_full_eval = true;
-                bool has_partial_eval = false;
-
-                for (Move move : movelist) {
-                    UndoInfo u = pos.do_move(move);
-                    PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
-                    if (!u.captured && !promotion) {
-                        // move stays in TB, cannot determine eval
-                        has_full_eval = false;
+                EGMoveList movelist = EGMoveList(pos);
+                if (movelist.size() == 0) {
+                    if (pos.stm_in_check()) {
+                        LOSS_EGTB->TB[ix] = LOSS_IN(0);
+                        N_CHECKMATE++;
+                        N_LEVEL_POS++;
                     } else {
-                        has_partial_eval = true;
-                        EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
-                        if (!disable_allocate_promotion_tb || u.captured) {
-                            uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
-                            max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
-                        } // otherwise we must have lower bound from retrograde_promotion_tbs
+                        LOSS_EGTB->TB[ix] = 0; // stale mate
                     }
-                    pos.undo_move(u);
-                }
 
-                // either has_full_eval or has_partial_eval since we have at least one move
-                if (max_val > 0) {
-                    max_val--;
-                    MIN_LEVEL = std::max(MIN_LEVEL, (int16_t) (WIN_IN(0) - max_val));
-                }
-                if (max_val < 0) {
-                    max_val++;
-                    MIN_LEVEL = std::max(MIN_LEVEL, (int16_t) (max_val - LOSS_IN(0)));
-                }
+                } else {
+                
+                    // can have lower bound already from retrograde_promotion_tbs
+                    int16_t max_val = IS_LOWERBOUND(LOSS_EGTB->TB[ix]) ? LOWERBOUND_TO_VAL(LOSS_EGTB->TB[ix]) : LOSS_IN(0);
+                    // int16_t lb = LOWERBOUND_TO_VAL(LOSS_EGTB->TB[ix]);
+                    // int16_t max_val_2 = LOSS_IN(0);
 
-                if (has_full_eval) {
-                    // all moves lead to dependent TB (cannot be stalemate since we have moves)
-                    LOSS_EGTB->TB[ix] = max_val;
-                    N_LEVEL_POS++;
-                }
-                if (has_partial_eval) {
+                    bool has_full_eval = true;
+                    bool has_partial_eval = false;
+
+                    for (Move move : movelist) {
+                        UndoInfo u = pos.do_move(move);
+                        PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
+                        if (!u.captured && !promotion) {
+                            // move stays in TB, cannot determine eval
+                            has_full_eval = false;
+                        } else {
+                            has_partial_eval = true;
+                            EGTB* cap_egtb = CAPTURE_EGTBs[promotion][u.captured];
+                            if (!disable_allocate_promotion_tb || u.captured) {
+                                uint64_t fwd_ix = cap_egtb->ix_from_pos(pos);
+                                max_val = std::max(max_val, (int16_t) -cap_egtb->TB[fwd_ix]);
+                            } // otherwise we must have lower bound from retrograde_promotion_tbs
+                        }
+                        pos.undo_move(u);
+                    }
+
+                    // either has_full_eval or has_partial_eval since we have at least one move
+                    if (max_val > 0) {
+                        max_val--;
+                        MIN_LEVEL = std::max(MIN_LEVEL, (int16_t) (WIN_IN(0) - max_val));
+                    }
                     if (max_val < 0) {
-                        // there is at least one move that leads to a winning position for sntm
-                        // max_val is the upper bound on the val when only considering moves to dependent positions
-                        LOSS_EGTB->TB[ix] = MAYBELOSS_IN(max_val - LOSS_IN(0));
+                        max_val++;
+                        MIN_LEVEL = std::max(MIN_LEVEL, (int16_t) (max_val - LOSS_IN(0)));
                     }
-                    if (max_val >= 0) {
-                        // known win and draw can be inferred from partial eval
+
+                    if (has_full_eval) {
+                        // all moves lead to dependent TB (cannot be stalemate since we have moves)
                         LOSS_EGTB->TB[ix] = max_val;
+                        N_LEVEL_POS++;
+                    }
+                    if (has_partial_eval) {
+                        if (max_val < 0) {
+                            // there is at least one move that leads to a winning position for sntm
+                            // max_val is the upper bound on the val when only considering moves to dependent positions
+                            LOSS_EGTB->TB[ix] = MAYBELOSS_IN(max_val - LOSS_IN(0));
+                        }
+                        if (max_val >= 0) {
+                            // known win and draw can be inferred from partial eval
+                            LOSS_EGTB->TB[ix] = max_val;
+                        }
                     }
                 }
+                assert (!IS_LOWERBOUND(LOSS_EGTB->TB[ix]));
             }
-            assert (!IS_LOWERBOUND(LOSS_EGTB->TB[ix]));
         }
 
         uint64_t N_UNUSED = N_SYMMETRY + N_ILLEGAL_EP + N_PIECE_COLLISION + N_SNTM_IN_CHECK;
@@ -922,28 +930,32 @@ void GenEGTB::gen(int nthreads) {
 
             // Step 2a. From each lost position take a move backwards and set as win.
 
-            #pragma omp parallel for num_threads(nthreads) schedule(static,CHUNKSIZE)
-            for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
-                EGPosition pos;
-                if (LOSS_EGTB->TB[ix] == LOSS_IN(LEVEL-1)) {
-                    pos.reset();
-                    LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
-                    assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
+            const IndexLayout* loss_layout = LOSS_EGTB->get_layout();
+            #pragma omp parallel num_threads(nthreads)
+            {
+                PosDecoder decoder(loss_layout, LOSS_COLOR);
+                #pragma omp for schedule(static,CHUNKSIZE)
+                for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
+                    EGPosition pos;
+                    if (LOSS_EGTB->TB[ix] == LOSS_IN(LEVEL-1)) {
+                        decoder.pos_at_ix(pos, ix);
+                        assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
 
-                    // first compute all target indices and prefetch them, then update (hides memory latency)
-                    uint64_t win_ixs[MAX_MOVES];
-                    int n_win_ixs = 0;
-                    for (UndoInfo rev_move : EGUndoInfoList(pos)) {
-                        pos.do_rev_move(rev_move);
-                        uint64_t win_ix = WIN_EGTB->ix_from_pos(pos);
-                        __builtin_prefetch(&WIN_EGTB->TB[win_ix], 1);
-                        win_ixs[n_win_ixs++] = win_ix;
-                        pos.undo_rev_move(rev_move);
-                    }
-                    for (int i = 0; i < n_win_ixs; i++) {
-                        uint64_t win_ix = win_ixs[i];
-                        if (!IS_SET(WIN_EGTB->TB[win_ix]) || WIN_EGTB->TB[win_ix] < WIN_IN(LEVEL) ) {
-                            WIN_EGTB->TB[win_ix] = WIN_IN(LEVEL);
+                        // first compute all target indices and prefetch them, then update (hides memory latency)
+                        uint64_t win_ixs[MAX_MOVES];
+                        int n_win_ixs = 0;
+                        for (UndoInfo rev_move : EGUndoInfoList(pos)) {
+                            pos.do_rev_move(rev_move);
+                            uint64_t win_ix = WIN_EGTB->ix_from_pos(pos);
+                            __builtin_prefetch(&WIN_EGTB->TB[win_ix], 1);
+                            win_ixs[n_win_ixs++] = win_ix;
+                            pos.undo_rev_move(rev_move);
+                        }
+                        for (int i = 0; i < n_win_ixs; i++) {
+                            uint64_t win_ix = win_ixs[i];
+                            if (!IS_SET(WIN_EGTB->TB[win_ix]) || WIN_EGTB->TB[win_ix] < WIN_IN(LEVEL) ) {
+                                WIN_EGTB->TB[win_ix] = WIN_IN(LEVEL);
+                            }
                         }
                     }
                 }
@@ -951,44 +963,48 @@ void GenEGTB::gen(int nthreads) {
 
             // Step 2b. For each new win position, take move backwards and flag as potential (maybe) loss
 
-            #pragma omp parallel for num_threads(nthreads) schedule(static,CHUNKSIZE) reduction(+:N_LEVEL_POS)
-            for (uint64_t win_ix = 0; win_ix < WIN_EGTB->num_pos; win_ix++) {
-                if (WIN_EGTB->TB[win_ix] == WIN_IN(LEVEL)) {
-                    EGPosition pos;
-                    pos.reset();
-                    WIN_EGTB->pos_at_ix(pos, win_ix, ~LOSS_COLOR); // not much slower
-                    assert (WIN_EGTB->pos_ix_is_used(pos,win_ix));
-                    N_LEVEL_POS++;
+            const IndexLayout* win_layout = WIN_EGTB->get_layout();
+            #pragma omp parallel num_threads(nthreads)
+            {
+                PosDecoder decoder(win_layout, ~LOSS_COLOR);
+                #pragma omp for schedule(static,CHUNKSIZE) reduction(+:N_LEVEL_POS)
+                for (uint64_t win_ix = 0; win_ix < WIN_EGTB->num_pos; win_ix++) {
+                    if (WIN_EGTB->TB[win_ix] == WIN_IN(LEVEL)) {
+                        EGPosition pos;
+                        decoder.pos_at_ix(pos, win_ix);
+                        assert (WIN_EGTB->pos_ix_is_used(pos,win_ix));
+                        N_LEVEL_POS++;
 
-                    // first compute all target indices and prefetch them, then update (hides memory latency)
-                    uint64_t maybe_loss_ixs[MAX_MOVES];
-                    int n_maybe_loss_ixs = 0;
-                    for (UndoInfo rev_move : EGUndoInfoList(pos)) {
-                        pos.do_rev_move(rev_move);
-                        uint64_t maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
-                        __builtin_prefetch(&LOSS_EGTB->TB[maybe_loss_ix], 1);
-                        maybe_loss_ixs[n_maybe_loss_ixs++] = maybe_loss_ix;
-                        pos.undo_rev_move(rev_move);
-                    }
-                    for (int i = 0; i < n_maybe_loss_ixs; i++) {
-                        uint64_t maybe_loss_ix = maybe_loss_ixs[i];
-                        if (!IS_SET(LOSS_EGTB->TB[maybe_loss_ix])) {
-                            if (LOSS_EGTB->TB[maybe_loss_ix] == UNKNOWN) {
-                                LOSS_EGTB->TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
-                            } else {
-                                if (!(LOSS_EGTB->TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1)) {
-                                    std::cout << "LEVEL=" << LEVEL << ", LOSS_EGTB->TB[maybe_loss_ix]=" << LOSS_EGTB->TB[maybe_loss_ix] << std::endl;
+                        // first compute all target indices and prefetch them, then update (hides memory latency)
+                        uint64_t maybe_loss_ixs[MAX_MOVES];
+                        int n_maybe_loss_ixs = 0;
+                        for (UndoInfo rev_move : EGUndoInfoList(pos)) {
+                            pos.do_rev_move(rev_move);
+                            uint64_t maybe_loss_ix = LOSS_EGTB->ix_from_pos(pos);
+                            __builtin_prefetch(&LOSS_EGTB->TB[maybe_loss_ix], 1);
+                            maybe_loss_ixs[n_maybe_loss_ixs++] = maybe_loss_ix;
+                            pos.undo_rev_move(rev_move);
+                        }
+                        for (int i = 0; i < n_maybe_loss_ixs; i++) {
+                            uint64_t maybe_loss_ix = maybe_loss_ixs[i];
+                            if (!IS_SET(LOSS_EGTB->TB[maybe_loss_ix])) {
+                                if (LOSS_EGTB->TB[maybe_loss_ix] == UNKNOWN) {
+                                    LOSS_EGTB->TB[maybe_loss_ix] = MAYBELOSS_IN(LEVEL+1);
+                                } else {
+                                    if (!(LOSS_EGTB->TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1)) {
+                                        std::cout << "LEVEL=" << LEVEL << ", LOSS_EGTB->TB[maybe_loss_ix]=" << LOSS_EGTB->TB[maybe_loss_ix] << std::endl;
+                                    }
+                                    assert(LOSS_EGTB->TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1);
+                                    // LOSS_TB[maybe_loss_ix] has to be MAYBELOSS_IN(SOME_LEVEL) where SOME_LEVEL >= LEVEL+1
+                                    // if SOME_LEVEL == LEVEL+1 this is what we would have set anyways
+                                    // if SOME_LEVEL > LEVEL+1 there has to be a move to dependent table which is < WIN_IN(LEVEL)
+                                    // SOME_LEVEL < LEVEL + 1 cannot happen as all such positions had to be considered previous iterations
                                 }
-                                assert(LOSS_EGTB->TB[maybe_loss_ix] - MAYBELOSS_IN(0) >= LEVEL+1);
-                                // LOSS_TB[maybe_loss_ix] has to be MAYBELOSS_IN(SOME_LEVEL) where SOME_LEVEL >= LEVEL+1
-                                // if SOME_LEVEL == LEVEL+1 this is what we would have set anyways
-                                // if SOME_LEVEL > LEVEL+1 there has to be a move to dependent table which is < WIN_IN(LEVEL)
-                                // SOME_LEVEL < LEVEL + 1 cannot happen as all such positions had to be considered previous iterations
                             }
                         }
                     }
-                }
-            }            
+                }            
+            }
         }
 
 
@@ -1010,51 +1026,55 @@ void GenEGTB::gen(int nthreads) {
                 WIN_EGTB = WTM_EGTB;
             }
 
-            #pragma omp parallel for num_threads(nthreads) schedule(static,CHUNKSIZE) reduction(+:N_LEVEL_POS)
-            for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
-                EGPosition pos;
-                if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL)) {
-                    pos.reset();
-                    LOSS_EGTB->pos_at_ix(pos, ix, LOSS_COLOR);
-                    assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
+            const IndexLayout* loss_layout = LOSS_EGTB->get_layout();
+            #pragma omp parallel num_threads(nthreads)
+            {
+                PosDecoder decoder(loss_layout, LOSS_COLOR);
+                #pragma omp for schedule(static,CHUNKSIZE) reduction(+:N_LEVEL_POS)
+                for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
+                    EGPosition pos;
+                    if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL)) {
+                        decoder.pos_at_ix(pos, ix);
+                        assert (LOSS_EGTB->pos_ix_is_used(pos,ix));
 
-                    // check that all forward moves lead to checkmate in <= -(LEVEL-1)
-                    EGMoveList moveList = EGMoveList(pos);
-                    int16_t max_val = LOSS_IN(LEVEL-1); // there is at least one move that leads to WIN_IN(LEVEL-1)
-                    if (moveList.size() == 0) {
-                        max_val = 0; // has to be stale mate
-                        if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL))
-                            std::cout << pos << ix << std::endl;
-                        assert(LOSS_EGTB->TB[ix] != MAYBELOSS_IN(LEVEL)); // cannot happen at MAYBELOSS position
-                    } else {
-                        for (Move move : moveList) {
-                            UndoInfo u = pos.do_move(move);
-                            PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
+                        // check that all forward moves lead to checkmate in <= -(LEVEL-1)
+                        EGMoveList moveList = EGMoveList(pos);
+                        int16_t max_val = LOSS_IN(LEVEL-1); // there is at least one move that leads to WIN_IN(LEVEL-1)
+                        if (moveList.size() == 0) {
+                            max_val = 0; // has to be stale mate
+                            if (LOSS_EGTB->TB[ix] == MAYBELOSS_IN(LEVEL))
+                                std::cout << pos << ix << std::endl;
+                            assert(LOSS_EGTB->TB[ix] != MAYBELOSS_IN(LEVEL)); // cannot happen at MAYBELOSS position
+                        } else {
+                            for (Move move : moveList) {
+                                UndoInfo u = pos.do_move(move);
+                                PieceType promotion = move.type_of() == PROMOTION ? move.promotion_type() : NO_PIECE_TYPE;
 
-                            if (!promotion && !u.captured) {
-                                uint64_t fwd_ix = WIN_EGTB->ix_from_pos(pos);
-                                int16_t val = WIN_EGTB->TB[fwd_ix];
-                                if (val == UNKNOWN) {
-                                    max_val = 0;
-                                } else {
-                                    max_val = std::max(max_val, (int16_t) -val);
+                                if (!promotion && !u.captured) {
+                                    uint64_t fwd_ix = WIN_EGTB->ix_from_pos(pos);
+                                    int16_t val = WIN_EGTB->TB[fwd_ix];
+                                    if (val == UNKNOWN) {
+                                        max_val = 0;
+                                    } else {
+                                        max_val = std::max(max_val, (int16_t) -val);
+                                    }
                                 }
-                            }
 
-                            pos.undo_move(u);
+                                pos.undo_move(u);
                             
-                            if (max_val > LOSS_IN(LEVEL-1)) { break; }
+                                if (max_val > LOSS_IN(LEVEL-1)) { break; }
+                            }
                         }
-                    }
                     
-                    if (max_val == LOSS_IN(LEVEL-1)) {
-                        LOSS_EGTB->TB[ix] = LOSS_IN(LEVEL);
-                        N_LEVEL_POS++;
-                    } else {
-                        // maybeloss can be refuted by finding non-capture non-promo move
-                        LOSS_EGTB->TB[ix] = UNKNOWN;
-                    }
+                        if (max_val == LOSS_IN(LEVEL-1)) {
+                            LOSS_EGTB->TB[ix] = LOSS_IN(LEVEL);
+                            N_LEVEL_POS++;
+                        } else {
+                            // maybeloss can be refuted by finding non-capture non-promo move
+                            LOSS_EGTB->TB[ix] = UNKNOWN;
+                        }
                     
+                    }
                 }
             }
         }

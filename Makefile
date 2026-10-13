@@ -55,10 +55,11 @@ lib: | build
 	$(CC) -g $(flags) -c -o build/egtb_ids.o src/egtb_ids.cpp
 	$(CC) -g $(flags) -c -o build/kkx.o src/kkx.cpp
 	$(CC) -g $(flags) -c -o build/linearize.o src/linearize.cpp
+	$(CC) -g $(flags) -c -o build/pos_decoder.o src/pos_decoder.cpp
 	$(CC) -g $(flags) -c -o build/triangular_indexes.o src/triangular_indexes.cpp
 	$(CC) -g $(flags) -c -o build/uci.o src/uci.cpp
 
-corefiles = build/bitboard.o build/compressed_tb.o build/eg_movegen.o build/eg_position.o build/egtb.o build/egtb_ids.o build/kkx.o build/linearize.o build/triangular_indexes.o build/uci.o
+corefiles = build/bitboard.o build/compressed_tb.o build/eg_movegen.o build/eg_position.o build/egtb.o build/egtb_ids.o build/kkx.o build/linearize.o build/pos_decoder.o build/triangular_indexes.o build/uci.o
 
 gen: lib | build
 	$(CC) -g $(flags) -o build/gen_main.out src/gen_main.cpp $(corefiles) $(lzstd)

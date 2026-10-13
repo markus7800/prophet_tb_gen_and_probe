@@ -12,12 +12,55 @@ uint64_t _number_of_ordered_tuples(uint64_t n_domain, uint64_t n_tuple) {
 
 uint64_t NUMBER_OF_ORDER_TUPLES[65][8];
 
+// lookup tables for fast_tril_from_linear
+static uint8_t TRIL2[2016][2];      // C(64,2)
+static uint8_t TRIL3[41664][3];     // C(64,3)
+static uint8_t TRIL4[635376][4];    // C(64,4)
+
+static void init_tril_tables() {
+    // rank of an ascending tuple is sum_i C(ixs[i], i+1), see tril_to_linear
+    for (int a = 0; a < 64; a++) {
+        for (int b = a + 1; b < 64; b++) {
+            uint64_t r2 = _number_of_ordered_tuples(a, 1) + _number_of_ordered_tuples(b, 2);
+            TRIL2[r2][0] = a; TRIL2[r2][1] = b;
+            for (int c = b + 1; c < 64; c++) {
+                uint64_t r3 = r2 + _number_of_ordered_tuples(c, 3);
+                TRIL3[r3][0] = a; TRIL3[r3][1] = b; TRIL3[r3][2] = c;
+                for (int d = c + 1; d < 64; d++) {
+                    uint64_t r4 = r3 + _number_of_ordered_tuples(d, 4);
+                    TRIL4[r4][0] = a; TRIL4[r4][1] = b; TRIL4[r4][2] = c; TRIL4[r4][3] = d;
+                }
+            }
+        }
+    }
+}
+
+void fast_tril_from_linear(uint64_t n_tuple, uint64_t tril_ix, int* ixs) {
+    switch (n_tuple) {
+    case 1:
+        ixs[0] = tril_ix;
+        break;
+    case 2:
+        ixs[0] = TRIL2[tril_ix][0]; ixs[1] = TRIL2[tril_ix][1];
+        break;
+    case 3:
+        ixs[0] = TRIL3[tril_ix][0]; ixs[1] = TRIL3[tril_ix][1]; ixs[2] = TRIL3[tril_ix][2];
+        break;
+    case 4:
+        ixs[0] = TRIL4[tril_ix][0]; ixs[1] = TRIL4[tril_ix][1]; ixs[2] = TRIL4[tril_ix][2]; ixs[3] = TRIL4[tril_ix][3];
+        break;
+    default:
+        tril_from_linear(n_tuple, tril_ix, ixs);
+    }
+}
+
 void init_tril() {
     for (uint64_t i = 0; i <= 64; i++) {
         for (uint64_t n = 0; n < 8; n++) {
             NUMBER_OF_ORDER_TUPLES[i][n] = _number_of_ordered_tuples(i, n);
         }
     }
+    init_tril_tables();
 }
 
 // ixs in ascending order

@@ -9,6 +9,7 @@
 #include "linearize.h"
 #include "types.h"
 #include "egtb_ids.h"
+#include "pos_decoder.h"
 #include <mutex>
 
 std::string get_default_folder(std::string root_folder, int stm_pieces_[6], int sntm_pieces_[6]);
@@ -34,6 +35,10 @@ struct EGTB {
 
     std::once_flag has_initialised_compressed_tb;
 
+    // index layout for fast decoding (PosDecoder), created on first use
+    IndexLayout* layout;
+    std::once_flag has_initialised_layout;
+
     EGTB(int stm_pieces_[6], int sntm_pieces_[6], std::string root_folder) {
         std::string folder_ = get_default_folder(root_folder, stm_pieces_, sntm_pieces_);
         std::string id_ = get_egtb_identifier(stm_pieces_, sntm_pieces_);
@@ -51,6 +56,7 @@ struct EGTB {
         // std::cout << "~EGTB(" << id << ")" << std::endl;
         free_compressed_tb();
         assert (TB == nullptr);
+        delete layout;
     }
 
     void init(std::string folder_, std::string id_, int stm_pieces_[6], int sntm_pieces_[6]) {
@@ -71,6 +77,15 @@ struct EGTB {
         compressed = false;
         TB = nullptr;
         CTB = nullptr;
+        layout = nullptr;
+    }
+
+    // thread-safe
+    const IndexLayout* get_layout() {
+        std::call_once(has_initialised_layout, [this]() {
+            layout = new IndexLayout(stm_pieces, sntm_pieces, kntm_poscounts, num_nonep_pos);
+        });
+        return layout;
     }
 
 

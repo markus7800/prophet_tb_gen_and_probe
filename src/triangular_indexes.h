@@ -22,6 +22,8 @@ inline uint64_t number_of_ordered_tuples(uint64_t n_domain, uint64_t n_tuple) {
 uint64_t tril_to_linear(uint64_t n_tuple, int* ixs);
 // writes to ixs in ascending order
 void tril_from_linear(uint64_t n_tuple, uint64_t tril_ix, int* ixs);
+// same as tril_from_linear, with lookup tables for n_tuple <= 4 (filled by init_tril)
+void fast_tril_from_linear(uint64_t n_tuple, uint64_t tril_ix, int* ixs);
 
 
 void test_tril(uint64_t n_domain, uint64_t n_tuple);

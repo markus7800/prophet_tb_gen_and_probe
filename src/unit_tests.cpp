@@ -5,6 +5,8 @@
 #include <prophet_common.h>
 #include "legacy_v1.h"
 #include <filesystem>
+#include <chrono>
+#include <cstring>
 namespace fs = std::filesystem;
 
 /*
@@ -199,6 +201,118 @@ void test_v1(const std::string& scratch, const std::string& ref_root) {
     }
 }
 
+void test_fast_tril() {
+    int a[8], b[8];
+    for (uint64_t n = 1; n <= 4; n++) {
+        bool ok = true;
+        for (uint64_t t = 0; t < number_of_ordered_tuples(64, n); t++) {
+            tril_from_linear(n, t, a);
+            fast_tril_from_linear(n, t, b);
+            for (uint64_t i = 0; i < n; i++) ok = ok && a[i] == b[i];
+        }
+        CHECK(ok);
+    }
+    std::cout << "test_fast_tril done" << std::endl;
+}
+
+bool same_position(const EGPosition& a, const EGPosition& b) {
+    return memcmp(&a, &b, sizeof(EGPosition)) == 0;
+}
+
+// compares PosDecoder with pos_at_ix_ for all indices (n_random == 0) or for random indices and sequential runs
+uint64_t check_decoder(const std::string& egtb_id, uint64_t n_random) {
+    EGTB egtb("unused", egtb_id);
+    uint64_t n_mismatch = 0;
+    for (Color stm : {WHITE, BLACK}) {
+        if (n_random == 0) {
+            #pragma omp parallel reduction(+:n_mismatch)
+            {
+                PosDecoder seq(egtb.get_layout(), stm), rnd(egtb.get_layout(), stm);
+                EGPosition p1, p2;
+                #pragma omp for schedule(static, 65536)
+                for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
+                    p1.reset(); egtb.pos_at_ix(p1, ix, stm);
+                    seq.pos_at_ix(p2, ix);
+                    n_mismatch += !same_position(p1, p2);
+                    // every 7th index, so that the slice hint has to jump
+                    if (ix % 7 == 0) {
+                        rnd.pos_at_ix(p2, ix);
+                        n_mismatch += !same_position(p1, p2);
+                    }
+                }
+            }
+        } else {
+            PosDecoder seq(egtb.get_layout(), stm), rnd(egtb.get_layout(), stm);
+            EGPosition p1, p2;
+            std::mt19937_64 rng(egtb.num_pos + stm);
+            for (uint64_t i = 0; i < n_random; i++) {
+                uint64_t ix = rng() % egtb.num_pos;
+                p1.reset(); egtb.pos_at_ix(p1, ix, stm);
+                rnd.pos_at_ix(p2, ix);
+                n_mismatch += !same_position(p1, p2);
+                // short sequential run from ix (crosses digit carries and slice boundaries)
+                if (i % 100 == 0) {
+                    for (uint64_t jx = ix; jx < std::min(egtb.num_pos, ix + 5000); jx++) {
+                        p1.reset(); egtb.pos_at_ix(p1, jx, stm);
+                        seq.pos_at_ix(p2, jx);
+                        n_mismatch += !same_position(p1, p2);
+                    }
+                }
+            }
+            // slice boundaries and the first en-passant indices
+            for (uint64_t ix : {(uint64_t) 0, egtb.num_nonep_pos - 1, std::min(egtb.num_pos - 1, egtb.num_nonep_pos), egtb.num_pos - 1}) {
+                p1.reset(); egtb.pos_at_ix(p1, ix, stm);
+                rnd.pos_at_ix(p2, ix);
+                n_mismatch += !same_position(p1, p2);
+            }
+        }
+    }
+    return n_mismatch;
+}
+
+void test_decoder() {
+    // exhaustive for all tables up to 4 pieces
+    uint64_t n_mismatch = 0;
+    for (std::string egtb_id : get_egtb_identifiers(0, 2)) n_mismatch += check_decoder(egtb_id, 0);
+    CHECK(n_mismatch == 0);
+    // exhaustive for some 5-men tables, sampled for some 6-men tables
+    // (pawns on both sides incl. en-passant, identical pieces up to 4, pawnless)
+    for (std::string egtb_id : {"KNPKB", "KPPKP", "KQRKR", "KPPPK", "KBBKN"}) {
+        uint64_t n = check_decoder(egtb_id, 0);
+        if (n) std::cout << egtb_id << ": " << n << " mismatches" << std::endl;
+        CHECK(n == 0);
+    }
+    for (std::string egtb_id : {"KRPKRP", "KPPPPK", "KPPKPP", "KQRBKN", "KBBBKN", "KNNKNN", "KQPKRB"}) {
+        uint64_t n = check_decoder(egtb_id, 200000);
+        if (n) std::cout << egtb_id << ": " << n << " mismatches" << std::endl;
+        CHECK(n == 0);
+    }
+    std::cout << "test_decoder done" << std::endl;
+}
+
+void bench_decoder(const std::string& egtb_id) {
+    EGTB egtb("unused", egtb_id);
+    const uint64_t N = 2000000;
+    std::mt19937_64 rng(1);
+    std::vector<uint64_t> ixs(N);
+    for (auto& x : ixs) x = rng() % egtb.num_nonep_pos;
+    uint64_t start = rng() % (egtb.num_nonep_pos - N);
+    EGPosition pos;
+    PosDecoder dec(egtb.get_layout(), WHITE);
+    uint64_t sink = 0;
+    auto time = [&](auto f) {
+        auto t0 = std::chrono::steady_clock::now();
+        for (uint64_t i = 0; i < N; i++) { f(i); sink += pos.pieces(); }
+        return std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t0).count() / N;
+    };
+    double old_rnd = time([&](uint64_t i) { pos.reset(); egtb.pos_at_ix(pos, ixs[i], WHITE); });
+    double new_rnd = time([&](uint64_t i) { dec.pos_at_ix(pos, ixs[i]); });
+    double old_seq = time([&](uint64_t i) { pos.reset(); egtb.pos_at_ix(pos, start + i, WHITE); });
+    double new_seq = time([&](uint64_t i) { dec.pos_at_ix(pos, start + i); });
+    printf("bench %-7s pos_at_ix_: random %5.1f ns, sequential %5.1f ns | PosDecoder: random %5.1f ns, sequential %5.1f ns (%lu)\n",
+        egtb_id.c_str(), old_rnd, old_seq, new_rnd, new_seq, (unsigned long) (sink & 1));
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         std::cerr << "usage: unit_tests.out [scratch_folder] (optional: [reference_root])" << std::endl;
@@ -216,6 +330,9 @@ int main(int argc, char *argv[]) {
     test_roundtrip(scratch, 100000, 1024, false);
     test_roundtrip(scratch, 300000, 131072, false); // block size > 65535 uses UINT32 block sizes
     if (argc > 2) test_v1(scratch, argv[2]);
+    test_fast_tril();
+    test_decoder();
+    for (std::string egtb_id : {"KNPKB", "KPPKP", "KQRKR", "KRPKRP", "KQRBKN"}) bench_decoder(egtb_id);
 
     std::cout << (n_failed == 0 ? "All unit tests passed." : "Some unit tests FAILED.") << std::endl;
     return n_failed == 0 ? 0 : 1;
