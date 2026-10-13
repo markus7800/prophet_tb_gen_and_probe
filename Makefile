@@ -25,6 +25,10 @@ endif
 ifdef ZSTD_LEVEL
 	flags += -DEGTB_COMPRESSION_LEVEL=$(ZSTD_LEVEL)
 endif
+ifdef MAX_DICT
+	# only for testing the escape code path of the rank encoding
+	flags += -DEGTB_MAX_DICT=$(MAX_DICT)
+endif
 ifdef PDEP
 	flags += -mbmi2 -DPDEP
 endif

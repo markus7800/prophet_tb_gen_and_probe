@@ -27,7 +27,10 @@ header_size UINT64 = number of bytes before BLOCK_SIZES (56, later versions may 
 checksum UINT64 (see compute_checksum)
 num_pos UINT64
 block_size UINT64
-flags UINT64 (currently 0)
+flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE)
+if flags & FLAG_RANK_ENCODED:
+  dict_size UINT64 (number of values in the dictionary, at most 256, at most 255 if FLAG_ESCAPE)
+  dict_size * INT16 dictionary values, zero-padded to a multiple of 8 bytes
 
 BLOCK_SIZES
 if block_size > 65535:
@@ -38,12 +41,25 @@ where  n_blocks = ceil((double) num_pos / block_size);
 
 COMPRESSED DATA
 individual compressed blocks concatenated at byte level
+without FLAG_RANK_ENCODED, a block is the zstd-compressed int16 values of the block
+with FLAG_RANK_ENCODED, a block is the zstd-compressed payload:
+  n UINT8 codes (n = number of entries in the block), code c < dict_size stands for dictionary value c
+  if FLAG_ESCAPE, code dict_size is the escape code: the actual INT16 values of all escaped entries
+  follow the n codes in order of occurrence
+The dictionary is global for the table and sorted by decreasing frequency.
 
 Legacy version 1 (read-only) has no magic and a 3 x UINT64 header: checksum, num_pos, block_size.
 Its checksum is the XOR of (ix << 10) | abs(value), see compute_checksum_v1.
 */
 
 #define COMP_MAGIC 0x32425448504F5250ULL // bytes "PROPHTB2" read as little-endian uint64
+#define FLAG_RANK_ENCODED 1
+#define FLAG_ESCAPE 2
+// maximal number of codes (dictionary values + escape code); lower values can be set at compile time to test the escape path
+#ifndef EGTB_MAX_DICT
+#define EGTB_MAX_DICT 256
+#endif
+static_assert(2 <= EGTB_MAX_DICT && EGTB_MAX_DICT <= 256, "EGTB_MAX_DICT must be in [2, 256]");
 #define COMP_VERSION 2
 #define COMP_V1_HEADER_SIZE (3 * sizeof(uint64_t))
 #define COMP_V2_HEADER_SIZE (7 * sizeof(uint64_t))
@@ -75,6 +91,20 @@ uint64_t compute_checksum_v1(const int16_t* TB, uint64_t num_pos, [[maybe_unused
 // checksum of the given file format version
 uint64_t compute_checksum_version(uint64_t version, const int16_t* TB, uint64_t num_pos, int nthreads);
 
+struct ValueDict {
+  uint64_t size; // number of dictionary values
+  bool escape; // if true, code size is the escape code
+  int16_t values[256];
+};
+
+// builds the dictionary of the most frequent values of TB
+void build_value_dict(const int16_t* TB, uint64_t num_pos, int nthreads, ValueDict& dict);
+// encodes n values into payload (n codes followed by escaped int16 values), returns payload size in bytes
+// code_of maps (uint16_t) value to its code, or to -1 if the value is escaped; payload must hold 3*n bytes
+uint64_t encode_block(const int16_t* values, uint64_t n, const int16_t* code_of, uint8_t escape_code, uint8_t* payload);
+// decodes a payload of n entries, returns false if the payload is inconsistent
+bool decode_block(const uint8_t* payload, uint64_t payload_size, uint64_t n, const ValueDict& dict, int16_t* values);
+
 uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
 
 // parses a header of version 1 or 2 from the first n bytes of a file, returns false if invalid
@@ -82,6 +112,9 @@ bool parse_compressed_header(const uint8_t* data, uint64_t n, CompressedHeader& 
 // reads header of compressed file, returns false if file cannot be read or is invalid
 bool read_compressed_header(std::string compressed_filename, CompressedHeader& header);
 bool read_compressed_header(std::string compressed_filename, uint64_t& checksum, uint64_t& num_pos, uint64_t& block_size);
+// parses the value dictionary that follows the fixed header (header_size bytes of data have to be available)
+// for files without FLAG_RANK_ENCODED the dictionary is empty
+bool parse_value_dict(const uint8_t* data, uint64_t n, const CompressedHeader& header, ValueDict& dict);
 // checks that compressed file is not truncated, i.e. header, block sizes and all blocks are present
 bool is_complete_compressed_file(std::string compressed_filename);
 // decompresses source and block-compresses it with block_size to target (source == target is allowed)
@@ -93,6 +126,7 @@ struct DecompressCtx {
   uint64_t uncompressed_block_ix;
   uint64_t buf_size;
   int16_t* uncompressed_buf;
+  uint8_t* payload_buf; // 3 * buf_size bytes: codes + escaped values of a rank encoded block
   ZSTD_DCtx* decompressor;
   uint64_t probe_count;
   DecompressCtx(uint64_t buf_size_ = 2097152) {
@@ -100,11 +134,13 @@ struct DecompressCtx {
     uncompressed_block_ix = UINT64_MAX;
     buf_size = buf_size_;
     uncompressed_buf = (int16_t*) malloc(buf_size * sizeof(int16_t));
+    payload_buf = (uint8_t*) malloc(3 * buf_size);
     decompressor = ZSTD_createDCtx();
     probe_count = 0;
   }
   ~DecompressCtx() {
     free(uncompressed_buf);
+    free(payload_buf);
     ZSTD_freeDCtx(decompressor);
   }
 };
@@ -128,6 +164,7 @@ struct CompressedTB {
   uint8_t* map_ptr;
   uint8_t* compressed_blocks;
   DecompressCtx* decompress_ctx;
+  ValueDict dict; // only used if flags & FLAG_RANK_ENCODED
 
   CompressedTB(int egtb_ix_, std::string filename) {
     // std::cout << "CompressedEGTB " << this << ": " << filename << std::endl;
@@ -156,6 +193,10 @@ struct CompressedTB {
         exit(EXIT_FAILURE);
     }
     uint64_t headersize = header.header_size;
+    if (headersize > this->compressed_filesize || !parse_value_dict(this->map_ptr, headersize, header, this->dict)) {
+        printf("Invalid header in file %s.\n", this->compressed_filename.c_str());
+        exit(EXIT_FAILURE);
+    }
     this->version = header.version;
     this->flags = header.flags;
     this->checksum = header.checksum;
@@ -222,16 +263,35 @@ struct CompressedTB {
     if (dctx->egtb_ix != egtb_ix || dctx->uncompressed_block_ix != block_ix) {
       dctx->egtb_ix = egtb_ix; // DecompressCtx may be shared across CompressTB
       dctx->uncompressed_block_ix = block_ix;
-      uint64_t offset = get_block_offset(block_ix);
-      uint64_t size = std::min(block_size, num_pos - block_ix*block_size) * sizeof(int16_t);
-      size_t res = ZSTD_decompressDCtx(dctx->decompressor,
-        dctx->uncompressed_buf, size,
-        &compressed_blocks[offset], get_block_size(block_ix));
-      assert (!ZSTD_isError(res));
+      if (!decompress_block(block_ix, dctx, dctx->uncompressed_buf)) {
+        std::cerr << "Corrupt block " << block_ix << " in " << compressed_filename << std::endl;
+        exit(EXIT_FAILURE);
+      }
     }
     return dctx->uncompressed_buf[ix_in_block];
   }
-  
+
+  // number of entries in block block_ix
+  inline uint64_t get_block_npos(uint64_t block_ix) const {
+    return std::min(block_size, num_pos - block_ix * block_size);
+  }
+
+  // decompresses all values of block block_ix into out (at least get_block_npos(block_ix) entries),
+  // returns false if the block is corrupt; dctx->uncompressed_buf is not used, but may be passed as out
+  bool decompress_block(uint64_t block_ix, DecompressCtx* dctx, int16_t* out) const {
+    assert (dctx->buf_size >= block_size);
+    uint64_t n = get_block_npos(block_ix);
+    const uint8_t* src = &compressed_blocks[get_block_offset(block_ix)];
+    uint64_t src_size = get_block_size(block_ix);
+    if (flags & FLAG_RANK_ENCODED) {
+      size_t res = ZSTD_decompressDCtx(dctx->decompressor, dctx->payload_buf, 3 * n, src, src_size);
+      return !ZSTD_isError(res) && decode_block(dctx->payload_buf, res, n, dict, out);
+    } else {
+      size_t res = ZSTD_decompressDCtx(dctx->decompressor, out, n * sizeof(int16_t), src, src_size);
+      return !ZSTD_isError(res) && res == n * sizeof(int16_t);
+    }
+  }
+
 
   void decompress_to_array(int nthreads, int16_t* TB) {
     #pragma omp parallel num_threads(nthreads)
@@ -241,12 +301,10 @@ struct CompressedTB {
       #pragma omp for schedule(static)
       for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
         uint64_t block_ix = start_ix / block_size;
-        uint64_t offset = get_block_offset(block_ix);
-        uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
-        size_t res = ZSTD_decompressDCtx(dctx->decompressor,
-          &TB[start_ix], size,
-          &compressed_blocks[offset], get_block_size(block_ix));
-        assert (!ZSTD_isError(res));
+        if (!decompress_block(block_ix, dctx, &TB[start_ix])) {
+          std::cerr << "Corrupt block " << block_ix << " in " << compressed_filename << std::endl;
+          exit(EXIT_FAILURE);
+        }
       }
 
       #pragma omp critical
@@ -277,13 +335,12 @@ struct CompressedTB {
     assert (decompress_ctx->buf_size >= block_size);
     for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
         uint64_t block_ix = start_ix / block_size;
-        uint64_t offset = get_block_offset(block_ix);
-        uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
-        size_t res = ZSTD_decompressDCtx(decompress_ctx->decompressor,
-            decompress_ctx->uncompressed_buf, size,
-            &compressed_blocks[offset], get_block_size(block_ix));
-        assert (!ZSTD_isError(res));
-        fwrite(decompress_ctx->uncompressed_buf, sizeof(uint8_t), size, f);
+        if (!decompress_block(block_ix, decompress_ctx, decompress_ctx->uncompressed_buf)) {
+          std::cerr << "Corrupt block " << block_ix << " in " << compressed_filename << std::endl;
+          exit(EXIT_FAILURE);
+        }
+        decompress_ctx->uncompressed_block_ix = UINT64_MAX; // buffer content no longer matches cached block
+        fwrite(decompress_ctx->uncompressed_buf, sizeof(int16_t), get_block_npos(block_ix), f);
     }
     fclose(f);
   }

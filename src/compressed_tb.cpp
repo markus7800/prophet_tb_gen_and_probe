@@ -28,8 +28,9 @@ uint64_t compute_checksum_version(uint64_t version, const int16_t* TB, uint64_t 
 
 bool CompressedTB::check_integrity([[maybe_unused]] int nthreads) {
   uint64_t s = 0;
+  bool corrupt = false;
 
-  #pragma omp parallel num_threads(nthreads)
+  #pragma omp parallel num_threads(nthreads) reduction(||:corrupt)
   {
     DecompressCtx* dctx = new DecompressCtx(block_size);
     uint64_t local_s = 0;
@@ -37,12 +38,11 @@ bool CompressedTB::check_integrity([[maybe_unused]] int nthreads) {
     #pragma omp for schedule(static)
     for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
       uint64_t block_ix = start_ix / block_size;
-      uint64_t offset = get_block_offset(block_ix);
-      uint64_t block_npos = std::min(block_size, num_pos - start_ix);
-      size_t res = ZSTD_decompressDCtx(dctx->decompressor,
-        dctx->uncompressed_buf, block_npos * sizeof(int16_t),
-        &compressed_blocks[offset], get_block_size(block_ix));
-      assert (!ZSTD_isError(res));
+      uint64_t block_npos = get_block_npos(block_ix);
+      if (!decompress_block(block_ix, dctx, dctx->uncompressed_buf)) {
+        corrupt = true;
+        continue;
+      }
 
       if (version == 1) {
         for (uint64_t ix = start_ix; ix < start_ix + block_npos; ix++) {
@@ -62,12 +62,82 @@ bool CompressedTB::check_integrity([[maybe_unused]] int nthreads) {
     }
   }
 
-  return (s == checksum);
+  return !corrupt && (s == checksum);
+}
+
+void build_value_dict(const int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nthreads, ValueDict& dict) {
+  std::vector<uint64_t> counts(65536, 0);
+  #pragma omp parallel num_threads(nthreads)
+  {
+    std::vector<uint64_t> local_counts(65536, 0);
+    #pragma omp for schedule(static)
+    for (uint64_t ix = 0; ix < num_pos; ix++) {
+      local_counts[(uint16_t) TB[ix]]++;
+    }
+    #pragma omp critical
+    {
+      for (int v = 0; v < 65536; v++) counts[v] += local_counts[v];
+    }
+  }
+
+  // most frequent first, ties broken by value to be deterministic
+  std::vector<std::pair<uint64_t, int16_t>> freq;
+  for (int v = 0; v < 65536; v++) {
+    if (counts[v] > 0) freq.push_back({counts[v], (int16_t) (uint16_t) v});
+  }
+  std::sort(freq.begin(), freq.end(), [](const auto& a, const auto& b) {
+    return a.first != b.first ? a.first > b.first : a.second < b.second;
+  });
+
+  dict.escape = freq.size() > EGTB_MAX_DICT;
+  dict.size = dict.escape ? EGTB_MAX_DICT - 1 : freq.size();
+  for (uint64_t i = 0; i < 256; i++) {
+    dict.values[i] = i < dict.size ? freq[i].second : 0;
+  }
+}
+
+uint64_t encode_block(const int16_t* values, uint64_t n, const int16_t* code_of, uint8_t escape_code, uint8_t* payload) {
+  uint8_t* exceptions = payload + n;
+  for (uint64_t i = 0; i < n; i++) {
+    int16_t code = code_of[(uint16_t) values[i]];
+    if (code >= 0) {
+      payload[i] = (uint8_t) code;
+    } else {
+      payload[i] = escape_code;
+      memcpy(exceptions, &values[i], sizeof(int16_t));
+      exceptions += sizeof(int16_t);
+    }
+  }
+  return exceptions - payload;
+}
+
+bool decode_block(const uint8_t* payload, uint64_t payload_size, uint64_t n, const ValueDict& dict, int16_t* values) {
+  if (payload_size < n) return false;
+  const uint8_t* exceptions = payload + n;
+  const uint8_t* end = payload + payload_size;
+  for (uint64_t i = 0; i < n; i++) {
+    uint8_t code = payload[i];
+    if (code < dict.size) {
+      values[i] = dict.values[code];
+    } else if (dict.escape && code == dict.size && exceptions + sizeof(int16_t) <= end) {
+      memcpy(&values[i], exceptions, sizeof(int16_t));
+      exceptions += sizeof(int16_t);
+    } else {
+      return false;
+    }
+  }
+  return exceptions == end;
 }
 
 uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose) {
   uint64_t tb_size_bytes = num_pos * sizeof(int16_t);
   uint64_t checksum = compute_checksum(TB, num_pos, nthreads);
+
+  ValueDict dict;
+  build_value_dict(TB, num_pos, nthreads, dict);
+  std::vector<int16_t> code_of(65536, -1);
+  for (uint64_t i = 0; i < dict.size; i++) code_of[(uint16_t) dict.values[i]] = i;
+  uint8_t escape_code = dict.size; // only used if dict.escape
 
   uint64_t n_blocks = ceil((double) num_pos / block_size);
   uint64_t* block_sizes = (uint64_t*) malloc(n_blocks * sizeof(uint64_t));  
@@ -83,7 +153,9 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
   #pragma omp parallel num_threads(nthreads)
   {
     // thread-private allocations
-    std::vector<uint8_t> compressed(ZSTD_compressBound(block_size * sizeof(int16_t)));
+    std::vector<uint8_t> payload(3 * block_size);
+    std::vector<uint8_t> compressed(ZSTD_compressBound(3 * block_size));
+    ZSTD_CCtx* cctx = ZSTD_createCCtx(); // reused for all blocks of this thread
 
 
     #pragma omp for schedule(static) reduction(+:final_size)
@@ -91,7 +163,8 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
       uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
       uint64_t block_ix = start_ix / block_size;
 
-      uint64_t compressed_size = ZSTD_compress(compressed.data(), compressed.size(),  (uint8_t*) &TB[start_ix], size, compression_level);
+      uint64_t payload_size = encode_block(&TB[start_ix], size / sizeof(int16_t), code_of.data(), escape_code, payload.data());
+      uint64_t compressed_size = ZSTD_compressCCtx(cctx, compressed.data(), compressed.size(), payload.data(), payload_size, compression_level);
 
       if (ZSTD_isError(compressed_size) || compressed_size == 0) {
         std::cerr << "Compression of block " << block_ix << " failed: " << ZSTD_getErrorName(compressed_size) << std::endl;
@@ -112,12 +185,14 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
         overflow_blocks.emplace_back(block_ix, std::vector<uint8_t>(compressed.begin(), compressed.begin() + compressed_size));
       }
     }
-
+    ZSTD_freeCCtx(cctx);
   }
   std::sort(overflow_blocks.begin(), overflow_blocks.end());
 
   final_size += large_blocks ? sizeof(uint32_t) * n_blocks : sizeof(uint16_t) * n_blocks;
-  final_size += COMP_V2_HEADER_SIZE;
+  uint64_t dict_bytes = (dict.size * sizeof(int16_t) + 7) / 8 * 8;
+  uint64_t header_size = COMP_V2_HEADER_SIZE + sizeof(uint64_t) + dict_bytes;
+  final_size += header_size;
 
   if (write) {
     FILE* f = fopen((compressed_filename + ".tmp").c_str(), "wb");
@@ -125,9 +200,14 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
       std::cerr << "Error opening file: " << compressed_filename << std::endl;
       exit(1);
     }
-    uint64_t header[7] = {COMP_MAGIC, COMP_VERSION, COMP_V2_HEADER_SIZE, checksum, num_pos, block_size, 0};
+    uint64_t flags = FLAG_RANK_ENCODED | (dict.escape ? FLAG_ESCAPE : 0);
+    uint64_t header[7] = {COMP_MAGIC, COMP_VERSION, header_size, checksum, num_pos, block_size, flags};
     static_assert(sizeof(header) == COMP_V2_HEADER_SIZE);
     fwrite(header, sizeof(uint64_t), 7, f);
+    fwrite(&dict.size, sizeof(uint64_t), 1, f);
+    std::vector<uint8_t> dict_data(dict_bytes, 0);
+    memcpy(dict_data.data(), dict.values, dict.size * sizeof(int16_t));
+    fwrite(dict_data.data(), 1, dict_bytes, f);
     if (large_blocks) {
       std::vector<uint32_t> write_block_sizes(block_sizes, block_sizes + n_blocks);
       fwrite(write_block_sizes.data(), sizeof(uint32_t), n_blocks, f);
@@ -152,7 +232,8 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
     if (verbose) std::cout << "Wrote to " << compressed_filename << std::endl;
   }
   
-  if (verbose) std::cout << "Compressed final size: " << final_size << " ratio: " << (double) final_size / tb_size_bytes << std::endl;
+  if (verbose) std::cout << "Compressed final size: " << final_size << " ratio: " << (double) final_size / tb_size_bytes
+    << " (dictionary: " << dict.size << " values" << (dict.escape ? " + escape" : "") << ")" << std::endl;
 
 
   free(block_sizes);
@@ -194,6 +275,22 @@ bool read_compressed_header(std::string compressed_filename, CompressedHeader& h
   size_t n = fread(data, 1, COMP_V2_HEADER_SIZE, f);
   fclose(f);
   return parse_compressed_header(data, n, header);
+}
+
+bool parse_value_dict(const uint8_t* data, uint64_t n, const CompressedHeader& header, ValueDict& dict) {
+  dict.size = 0;
+  dict.escape = false;
+  for (int i = 0; i < 256; i++) dict.values[i] = 0;
+  if (!(header.flags & FLAG_RANK_ENCODED)) return true;
+  if (header.version < 2 || n < COMP_V2_HEADER_SIZE + sizeof(uint64_t)) return false;
+  uint64_t size;
+  memcpy(&size, data + COMP_V2_HEADER_SIZE, sizeof(uint64_t));
+  dict.escape = header.flags & FLAG_ESCAPE;
+  if (size > 256 || (dict.escape && size > 255) || size == 0) return false;
+  if (header.header_size < COMP_V2_HEADER_SIZE + sizeof(uint64_t) + size * sizeof(int16_t) || n < header.header_size) return false;
+  dict.size = size;
+  memcpy(dict.values, data + COMP_V2_HEADER_SIZE + sizeof(uint64_t), size * sizeof(int16_t));
+  return true;
 }
 
 bool read_compressed_header(std::string compressed_filename, uint64_t& checksum, uint64_t& num_pos, uint64_t& block_size) {

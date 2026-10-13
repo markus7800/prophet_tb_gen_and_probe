@@ -72,8 +72,49 @@ void test_checksum() {
     std::cout << "test_checksum done" << std::endl;
 }
 
-void test_roundtrip(const std::string& scratch, uint64_t num_pos, uint64_t block_size) {
-    std::vector<int16_t> TB = make_table(num_pos, 2 + num_pos);
+std::vector<int16_t> make_small_table(uint64_t num_pos, uint64_t seed) {
+    // at most 21 distinct values, no escape needed
+    std::mt19937_64 rng(seed);
+    std::vector<int16_t> TB(num_pos);
+    for (uint64_t ix = 0; ix < num_pos; ix++) {
+        uint64_t r = rng() % 3;
+        int level = (int) (rng() % 10);
+        TB[ix] = r == 0 ? 0 : (r == 1 ? WIN_IN(2 * level + 1) : LOSS_IN(2 * level));
+    }
+    return TB;
+}
+
+void test_block_codec() {
+    ValueDict dict;
+    std::vector<int16_t> TB = make_table(50000, 3);
+    build_value_dict(TB.data(), TB.size(), 2, dict);
+    CHECK(dict.escape == (EGTB_MAX_DICT < 330)); // make_table has about 330 distinct values
+    for (uint64_t i = 1; i < dict.size; i++) CHECK(dict.values[i - 1] != dict.values[i]);
+    CHECK(dict.values[0] == 0); // draws are the most frequent value
+
+    std::vector<int16_t> code_of(65536, -1);
+    for (uint64_t i = 0; i < dict.size; i++) code_of[(uint16_t) dict.values[i]] = i;
+    std::vector<uint8_t> payload(3 * TB.size());
+    uint64_t payload_size = encode_block(TB.data(), TB.size(), code_of.data(), dict.size, payload.data());
+    std::vector<int16_t> D(TB.size());
+    CHECK(decode_block(payload.data(), payload_size, TB.size(), dict, D.data()));
+    CHECK(D == TB);
+
+    // inconsistent payloads are rejected
+    CHECK(!decode_block(payload.data(), payload_size - 1, TB.size(), dict, D.data()));
+    CHECK(!decode_block(payload.data(), payload_size + 2, TB.size(), dict, D.data()));
+    std::vector<uint8_t> bad = payload;
+    bad[0] = 255; // invalid code (or escape without escaped value)
+    if (dict.size < 255) CHECK(!decode_block(bad.data(), payload_size, TB.size(), dict, D.data()));
+
+    std::vector<int16_t> S = make_small_table(50000, 4);
+    build_value_dict(S.data(), S.size(), 2, dict);
+    CHECK(!dict.escape || EGTB_MAX_DICT < 21);
+    std::cout << "test_block_codec done" << std::endl;
+}
+
+void test_roundtrip(const std::string& scratch, uint64_t num_pos, uint64_t block_size, bool small_dict) {
+    std::vector<int16_t> TB = small_dict ? make_small_table(num_pos, 2 + num_pos) : make_table(num_pos, 2 + num_pos);
     std::vector<int16_t> work = TB; // block_compress_TB overwrites its input
     std::string filename = scratch + "/roundtrip_" + std::to_string(num_pos) + "_" + std::to_string(block_size) + COMP_EXT;
     block_compress_TB(work.data(), num_pos, 4, 3, block_size, filename, true, false);
@@ -81,7 +122,8 @@ void test_roundtrip(const std::string& scratch, uint64_t num_pos, uint64_t block
     CompressedHeader header;
     CHECK(read_compressed_header(filename, header));
     CHECK(header.version == COMP_VERSION);
-    CHECK(header.header_size == COMP_V2_HEADER_SIZE);
+    CHECK(header.flags & FLAG_RANK_ENCODED);
+    CHECK(header.header_size > COMP_V2_HEADER_SIZE);
     CHECK(header.num_pos == num_pos);
     CHECK(header.block_size == block_size);
     CHECK(header.checksum == compute_checksum(TB.data(), num_pos, 1));
@@ -90,6 +132,9 @@ void test_roundtrip(const std::string& scratch, uint64_t num_pos, uint64_t block
     {
         CompressedTB ctb(0, filename);
         CHECK(ctb.version == COMP_VERSION);
+        CHECK(ctb.dict.size > 0);
+        if (!small_dict && num_pos > 10000) CHECK(ctb.dict.escape == (EGTB_MAX_DICT < 330));
+        if (small_dict) CHECK(!ctb.dict.escape || EGTB_MAX_DICT < 21);
         CHECK(ctb.check_integrity(4));
         std::vector<int16_t> D(num_pos);
         ctb.decompress_to_array(4, D.data());
@@ -112,7 +157,7 @@ void test_roundtrip(const std::string& scratch, uint64_t num_pos, uint64_t block
     CHECK(!read_compressed_header(filename, header));
     CHECK(!is_complete_compressed_file(filename));
     fs::remove(filename);
-    std::cout << "test_roundtrip(" << num_pos << ", " << block_size << ") done" << std::endl;
+    std::cout << "test_roundtrip(" << num_pos << ", " << block_size << (small_dict ? ", small dictionary" : "") << ") done" << std::endl;
 }
 
 void test_v1(const std::string& scratch, const std::string& ref_root) {
@@ -164,10 +209,12 @@ int main(int argc, char *argv[]) {
     prophet_tb_init();
 
     test_checksum();
-    test_roundtrip(scratch, 1, 32768);
-    test_roundtrip(scratch, 100000, 32768);
-    test_roundtrip(scratch, 100000, 1024);
-    test_roundtrip(scratch, 300000, 131072); // block size > 65535 uses UINT32 block sizes
+    test_block_codec();
+    test_roundtrip(scratch, 1, 32768, false);
+    test_roundtrip(scratch, 100000, 32768, false);
+    test_roundtrip(scratch, 100000, 32768, true);
+    test_roundtrip(scratch, 100000, 1024, false);
+    test_roundtrip(scratch, 300000, 131072, false); // block size > 65535 uses UINT32 block sizes
     if (argc > 2) test_v1(scratch, argv[2]);
 
     std::cout << (n_failed == 0 ? "All unit tests passed." : "Some unit tests FAILED.") << std::endl;

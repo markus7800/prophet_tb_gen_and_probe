@@ -41,12 +41,14 @@ build/gen_main.out "$OUT" $NPIECES "$THREADS" $TARGET > "$LOG" 2>&1
 END=$(date +%s)
 
 echo "== timings (summed over all tables)"
+# "Wrote to disk in" is measured from the end of the retrograde analysis, so it includes the consistency
+# check if that runs before writing (in-memory check); subtract it to report pure compression time
 awk '
     /^Finished allocate and load in/      { load += $(NF) + 0 }
     /^Finished init in/                   { init += $(NF) + 0 }
-    /^Finished retrograde in/             { retro += $(NF) + 0 }
-    /^Wrote to disk in/                   { write += $(NF) + 0 }
-    /^Finished in-memory consistency/     { check += $(NF) + 0 }
+    /^Finished retrograde in/             { retro += $(NF) + 0; written = 0; pending = 0 }
+    /^Finished in-memory consistency/     { check += $(NF) + 0; if (!written) pending += $(NF) + 0 }
+    /^Wrote to disk in/                   { write += $(NF) - pending; written = 1 }
     /^Finished TBs/                       { total += $(NF) + 0; n++ }
     END {
         printf "tables generated:   %d\n", n
