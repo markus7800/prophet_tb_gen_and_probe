@@ -74,7 +74,7 @@ The `3` means 3 pieces besides the kings. `/usr/bin/time -v` reports the peak me
 Timing summary from the log:
 
 ```bash
-grep -E "^Finished (init|retrograde|in-memory)|^Wrote to disk|^Finished TBs" gen_5men.log | awk '{s[$1" "$2]+=$NF} END {for (k in s) print k, s[k] "s"}'
+grep -E "^Finished (init|retrograde) in|^Finished in-memory|^Wrote to disk|^Finished TBs" gen_5men.log | awk '{s[$1" "$2]+=$NF} END {for (k in s) print k, s[k] "s"}'
 ```
 
 ## 6. Check the generated tables
@@ -85,8 +85,9 @@ Checksums and file structure:
 build/check_file_integrity.out egtbs $(nproc)
 ```
 
-Exhaustive comparison with the old published tables, if available (for example downloaded from prophet-tb.com and
-unpacked into a folder `ref`). This compares every used position and probes 100k random positions per table.
+Exhaustive comparison with old-format tables in a folder `ref`: either the published tables (for example
+downloaded from prophet-tb.com and unpacked), or the output of the baseline run in section 8
+(`../prophet-old/egtbs_old`). This compares every used position and probes 100k random positions per table.
 
 ```bash
 build/compare_tables.out ref egtbs $(nproc) 100000
@@ -120,6 +121,48 @@ build/compare_tables.out ref egtbs_final $(nproc) 100000
 ```bash
 du -sh egtbs egtbs_final
 ```
+
+## 8. Baseline: the old generator, for a timing comparison
+
+The README figure (5-men in under 2 hours) was measured on a Ryzen 5950X with 32 threads, and the table files
+contain no timings. For a fair comparison, run the old generator once on the same machine, with the same number of
+threads and no other load. As a side effect it produces a complete set of old-format tables, which serves as `ref`
+for `compare_tables` in sections 6 and 7.
+
+`3edbbcb` is the last commit before the optimisations (`main` at the time). Both versions build the same way, use
+zstd level 19 and blocks of 32768 values, and run the same consistency checks. The old generator has no
+target-table mode and no finalize, so compare the generation only; finalize time is in `finalize_5men.log`.
+
+From the `prophet` folder, check out the old code next to it:
+
+```bash
+git worktree add ../prophet-old 3edbbcb
+```
+
+```bash
+cd ../prophet-old && git submodule update --init && make -C zstd/lib -j libzstd.a && make gen OMP=1
+```
+
+```bash
+/usr/bin/time -v build/gen_main.out egtbs_old 3 $(nproc) 2>&1 | tee gen_5men_old.log
+```
+
+The old log has the same timing lines, so the same summary works. "Wrote to disk" includes the in-memory
+consistency check in both versions, so the sums are comparable as they are; "Finished TBs" is the total per table
+pair.
+
+```bash
+grep -E "^Finished (init|retrograde) in|^Finished in-memory|^Wrote to disk|^Finished TBs" gen_5men_old.log | awk '{s[$1" "$2]+=$NF} END {for (k in s) print k, s[k] "s"}'
+```
+
+Back in `prophet`, compare the new tables against the baseline's:
+
+```bash
+cd ../prophet && build/compare_tables.out ../prophet-old/egtbs_old egtbs $(nproc) 100000
+```
+
+A shorter comparison is up to 4 men (`2` instead of `3` in both runs, a minute or two each), but it is not
+representative: the gains are largest for 5- and 6-men tables.
 
 ## Notes
 
