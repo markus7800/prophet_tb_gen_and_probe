@@ -22,6 +22,11 @@ void unplace_piece(Piece p, int* pieces1, int* pieces2);
 
 std::vector<std::string> get_egtb_identifiers(int MIN_PIECE_COUNT = 0, int MAX_PIECE_COUNT = 4, int MIN_PAWN_COUNT = 0, int MAX_PAWN_COUNT = 4);
 
+// ids of all tables that the generation of the table pair (wpieces vs bpieces, bpieces vs wpieces) reads
+std::vector<std::string> get_dependency_ids(const int wpieces[6], const int bpieces[6]);
+// egtb_id, its mirror and all (transitive) dependencies with their mirrors
+std::unordered_set<std::string> get_dependency_closure(std::string egtb_id);
+
 
 extern std::unordered_map<std::string, int> EGTB_ID_TO_IX;
 void init_egtb_id_to_ix();

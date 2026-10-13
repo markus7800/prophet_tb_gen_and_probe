@@ -34,12 +34,23 @@ int main(int argc, char *argv[]) {
     init_kkp_table();
     init_tril();
 
-    assert (argc == 4);
+    // build/gen_main.out [folder] [max_npieces] [threads] (optional: [target_id])
+    // with target_id, only the target table and its (transitive) dependencies are generated
+    assert (argc == 4 || argc == 5);
     std::string folder = argv[1];
     int max_npieces = atoi(argv[2]);
     int nthreads = atoi(argv[3]);
     assert (0 <= max_npieces && max_npieces <= 4);
     std::vector<std::string> egtb_ids = get_egtb_identifiers(0, max_npieces);
+    if (argc == 5) {
+        std::unordered_set<std::string> closure = get_dependency_closure(argv[4]);
+        std::vector<std::string> filtered_ids;
+        for (std::string egtb_id : egtb_ids) {
+            if (closure.count(egtb_id)) filtered_ids.push_back(egtb_id);
+        }
+        egtb_ids = filtered_ids;
+        std::cout << "Generating " << argv[4] << " and its dependencies." << std::endl;
+    }
     std::cout << "EGTB count: " << egtb_ids.size() << std::endl;
 
     bool generate_missing = true;

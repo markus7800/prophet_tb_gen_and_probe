@@ -118,6 +118,56 @@ std::vector<std::string> get_egtb_identifiers(int MIN_PIECE_COUNT, int MAX_PIECE
 }
 
 
+std::vector<std::string> get_dependency_ids(const int wpieces_[6], const int bpieces_[6]) {
+    // mirrors the dependency enumeration of GenEGTB (captures, capture-promotions, promotions)
+    int w[6], b[6];
+    for (int i = 0; i < 6; i++) { w[i] = wpieces_[i]; b[i] = bpieces_[i]; }
+    std::vector<std::string> ids;
+
+    for (PieceType capture_pt = PAWN; capture_pt <= QUEEN; ++capture_pt) {
+        if (w[capture_pt] > 0) { w[capture_pt]--; ids.push_back(get_egtb_identifier(w, b)); w[capture_pt]++; }
+        if (b[capture_pt] > 0) { b[capture_pt]--; ids.push_back(get_egtb_identifier(b, w)); b[capture_pt]++; }
+    }
+    for (PieceType promote_pt = KNIGHT; promote_pt <= QUEEN; ++promote_pt) {
+        for (PieceType capture_pt = KNIGHT; capture_pt <= QUEEN; ++capture_pt) {
+            if (b[PAWN] > 0 && w[capture_pt] > 0) {
+                w[capture_pt]--; b[PAWN]--; b[promote_pt]++;
+                ids.push_back(get_egtb_identifier(w, b));
+                w[capture_pt]++; b[PAWN]++; b[promote_pt]--;
+            }
+            if (w[PAWN] > 0 && b[capture_pt] > 0) {
+                b[capture_pt]--; w[PAWN]--; w[promote_pt]++;
+                ids.push_back(get_egtb_identifier(b, w));
+                b[capture_pt]++; w[PAWN]++; w[promote_pt]--;
+            }
+        }
+    }
+    for (PieceType promote_pt = KNIGHT; promote_pt <= QUEEN; ++promote_pt) {
+        if (b[PAWN] > 0) { b[PAWN]--; b[promote_pt]++; ids.push_back(get_egtb_identifier(w, b)); b[PAWN]++; b[promote_pt]--; }
+        if (w[PAWN] > 0) { w[PAWN]--; w[promote_pt]++; ids.push_back(get_egtb_identifier(b, w)); w[PAWN]++; w[promote_pt]--; }
+    }
+    return ids;
+}
+
+std::unordered_set<std::string> get_dependency_closure(std::string egtb_id) {
+    // tables come in pairs (id, mirror id) that are generated together, so the closure stores both
+    std::unordered_set<std::string> closure;
+    std::vector<std::string> stack = {egtb_id};
+    while (!stack.empty()) {
+        std::string id = stack.back();
+        stack.pop_back();
+        if (closure.count(id)) continue;
+        closure.insert(id);
+        closure.insert(get_mirror_id(id));
+        int w[6], b[6];
+        egtb_id_to_pieces(id, w, b);
+        for (std::string dep_id : get_dependency_ids(w, b)) {
+            if (!closure.count(dep_id)) stack.push_back(dep_id);
+        }
+    }
+    return closure;
+}
+
 std::unordered_map<std::string, int> EGTB_ID_TO_IX;
 void init_egtb_id_to_ix() {
     int count = 0;

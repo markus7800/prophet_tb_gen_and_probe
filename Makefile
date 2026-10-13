@@ -31,7 +31,7 @@ endif
 
 prophet: flags += -fPIC
 
-.PHONY: lib gen mates compress recompress prophet check test clean
+.PHONY: lib gen mates compress recompress prophet check test compare clean
 
 build:
 	mkdir -p build
@@ -75,3 +75,6 @@ mates: | build
 
 test: | build
 	$(CC) -g $(flags) -o build/test.out src/test.cpp $(lprophet) $(lzstd)
+
+compare: | build
+	$(CC) -g $(flags) -o build/compare_tables.out src/compare_tables.cpp src/legacy_v1.cpp $(lprophet) $(lzstd)
