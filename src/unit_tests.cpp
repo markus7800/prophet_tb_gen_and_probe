@@ -6,6 +6,8 @@
 #include "legacy_v1.h"
 #include <filesystem>
 #include <chrono>
+#include <functional>
+#include <map>
 #include <cstring>
 namespace fs = std::filesystem;
 
@@ -313,6 +315,157 @@ void bench_decoder(const std::string& egtb_id) {
         egtb_id.c_str(), old_rnd, old_seq, new_rnd, new_seq, (unsigned long) (sink & 1));
 }
 
+// all table ids with n non-king pieces (both orientations)
+std::vector<std::string> all_ids(int n) {
+    std::vector<std::string> ids;
+    std::vector<int> pc(10, 0);
+    std::function<void(int, int)> rec = [&](int i, int left) {
+        if (i == 9) {
+            pc[9] = left;
+            int w[6] = {0}, b[6] = {0};
+            for (int k = 0; k < 5; k++) { w[k + 1] = pc[k]; b[k + 1] = pc[k + 5]; }
+            ids.push_back(get_egtb_identifier(w, b));
+            return;
+        }
+        for (int k = 0; k <= left; k++) { pc[i] = k; rec(i + 1, left - k); }
+    };
+    rec(0, n);
+    return ids;
+}
+
+void test_split_index_sizes() {
+    // the parts of a split table cover exactly the positions of the original index (Vandermonde's identity)
+    uint64_t n_split = 0, n_bad = 0;
+    for (int n = 1; n <= 5; n++) {
+        for (std::string egtb_id : all_ids(n)) {
+            EGTB egtb("unused", egtb_id);
+            if (!egtb.split()) continue;
+            n_split++;
+            uint64_t kc[N_KKP + 1], nonep, ep, num;
+            v1::compute_poscounts(egtb.stm_pieces, egtb.sntm_pieces, kc, nonep, ep, num);
+            bool ok = egtb.num_pos == num && egtb.num_nonep_pos == nonep && egtb.num_ep_pos == ep;
+            uint64_t end = 0;
+            for (int p = 0; p < egtb.n_parts(); p++) {
+                ok = ok && egtb.part_start(p) == end && egtb.part_size(p) > 0;
+                end = egtb.part_end(p);
+            }
+            ok = ok && end == egtb.num_pos;
+            int expected_parts = egtb.npawns == 1 ? 4 : ((egtb.stm_pieces[PAWN] == 1) ? 16 : 10);
+            ok = ok && egtb.n_parts() == expected_parts;
+            if (!ok) { std::cout << egtb_id << ": part sizes do not match the original index" << std::endl; n_bad++; }
+        }
+    }
+    CHECK(n_bad == 0);
+    std::cout << "test_split_index_sizes done (" << n_split << " split tables up to 7 pieces)" << std::endl;
+}
+
+// every position that is used in the original (v1) index maps to a used index of the new index that decodes to
+// the same position (up to symmetry), and both indices have the same number of used positions
+uint64_t check_split_bijection(const std::string& egtb_id, uint64_t n_random) {
+    EGTB egtb("unused", egtb_id);
+    uint64_t kc[N_KKP + 1], v1_nonep, v1_ep, v1_num;
+    v1::compute_poscounts(egtb.stm_pieces, egtb.sntm_pieces, kc, v1_nonep, v1_ep, v1_num);
+    uint64_t n_bad = 0, n_used_v1 = 0, n_used_new = 0;
+    for (Color stm : {WHITE, BLACK}) {
+        uint64_t n_v1 = n_random ? n_random : v1_num;
+        #pragma omp parallel for schedule(static, 4096) reduction(+:n_bad,n_used_v1)
+        for (uint64_t i = 0; i < n_v1; i++) {
+            uint64_t ix = n_random ? (i * 0x9E3779B97F4A7C15ULL) % v1_num : i;
+            EGPosition pos;
+            pos.reset();
+            v1::pos_at_ix_(pos, ix, stm, egtb.stm_pieces, egtb.sntm_pieces, kc);
+            if (popcount(pos.pieces()) != egtb.npieces || pos.sntm_in_check()) continue;
+            if (ix >= v1_nonep && !pos.check_ep(pos.ep_square())) continue;
+            if (v1::ix_from_pos_(pos, kc) != ix) continue;
+            n_used_v1++;
+            uint64_t new_ix = egtb.ix_from_pos(pos);
+            EGPosition pos2;
+            pos2.reset();
+            egtb.pos_at_ix(pos2, new_ix, stm);
+            if (!egtb.pos_ix_is_used(pos2, new_ix) || v1::ix_from_pos_(pos2, kc) != ix) n_bad++;
+        }
+        if (n_random == 0) {
+            #pragma omp parallel for schedule(static, 4096) reduction(+:n_used_new)
+            for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
+                EGPosition pos;
+                pos.reset();
+                egtb.pos_at_ix(pos, ix, stm);
+                n_used_new += egtb.pos_ix_is_used(pos, ix);
+            }
+        }
+    }
+    if (n_random == 0 && n_used_new != n_used_v1) n_bad++;
+    return n_bad;
+}
+
+void test_split_bijection() {
+    uint64_t n_bad = 0;
+    for (int n = 1; n <= 2; n++) {
+        for (std::string egtb_id : all_ids(n)) {
+            if (EGTB("unused", egtb_id).split()) n_bad += check_split_bijection(egtb_id, 0);
+        }
+    }
+    CHECK(n_bad == 0);
+    // 5 pieces: one pawn, two pawns of one side, one pawn each (en passant)
+    for (std::string egtb_id : {"KNPKB", "KPKRP"}) {
+        uint64_t n = check_split_bijection(egtb_id, 0);
+        if (n) std::cout << egtb_id << ": " << n << " bad" << std::endl;
+        CHECK(n == 0);
+    }
+    for (std::string egtb_id : {"KBKNP", "KPPKN", "KNKPP", "KRPKP"}) {
+        uint64_t n = check_split_bijection(egtb_id, 5000000);
+        if (n) std::cout << egtb_id << ": " << n << " bad" << std::endl;
+        CHECK(n == 0);
+    }
+    for (std::string egtb_id : {"KRPKRP", "KQPKRB", "KRBKPP", "KPPKRB", "KRPPKR"}) {
+        uint64_t n = check_split_bijection(egtb_id, 2000000);
+        if (n) std::cout << egtb_id << ": " << n << " bad" << std::endl;
+        CHECK(n == 0);
+    }
+    std::cout << "test_split_bijection done" << std::endl;
+}
+
+// promotions only lead to parts that promotion_compatible allows
+void test_promotion_compatible() {
+    uint64_t n_promotions = 0, n_bad = 0;
+    std::vector<std::string> ids = {"KPKP", "KPPK", "KKPP", "KPK", "KNPKB", "KPPKN", "KPKNP"};
+    for (std::string egtb_id : ids) {
+        EGTB egtb("unused", egtb_id);
+        // tables after a promotion (white promotes, black to move)
+        std::map<std::string, EGTB*> children;
+        for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt) {
+            int s[6], n[6];
+            for (int i = 0; i < 6; i++) { s[i] = egtb.sntm_pieces[i]; n[i] = egtb.stm_pieces[i]; }
+            if (n[PAWN] == 0) continue;
+            n[PAWN]--; n[pt]++;
+            std::string child_id = get_egtb_identifier(s, n);
+            children[child_id] = new EGTB("unused", child_id);
+        }
+        #pragma omp parallel for schedule(dynamic, 65536) reduction(+:n_promotions,n_bad)
+        for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
+            EGPosition pos;
+            pos.reset();
+            egtb.pos_at_ix(pos, ix, WHITE);
+            if (!egtb.pos_ix_is_used(pos, ix)) continue;
+            for (Move move : EGMoveList(pos)) {
+                if (move.type_of() != PROMOTION || pos.piece_on(move.to_sq()) != NO_PIECE) continue; // capture-promotion tables are always loaded completely
+                UndoInfo u = pos.do_move(move);
+                int s[6] = {0}, n[6] = {0};
+                for (int pt = PAWN; pt <= QUEEN; pt++) { s[pt] = pos.count(BLACK, PieceType(pt)); n[pt] = pos.count(WHITE, PieceType(pt)); }
+                EGTB* child = children.at(get_egtb_identifier(s, n));
+                uint64_t child_ix = child->ix_from_pos(pos);
+                n_promotions++;
+                if (!promotion_compatible(egtb.index, egtb.part_of(ix), child->index, child->part_of(child_ix))) n_bad++;
+                pos.undo_move(u);
+            }
+        }
+        for (auto& kv : children) delete kv.second;
+    }
+    CHECK(n_bad == 0);
+    CHECK(n_promotions > 0);
+    std::cout << "test_promotion_compatible done (" << n_promotions << " promotions)" << std::endl;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         std::cerr << "usage: unit_tests.out [scratch_folder] (optional: [reference_root])" << std::endl;
@@ -331,6 +484,9 @@ int main(int argc, char *argv[]) {
     test_roundtrip(scratch, 300000, 131072, false); // block size > 65535 uses UINT32 block sizes
     if (argc > 2) test_v1(scratch, argv[2]);
     test_fast_tril();
+    test_split_index_sizes();
+    test_split_bijection();
+    test_promotion_compatible();
     test_decoder();
     for (std::string egtb_id : {"KNPKB", "KPPKP", "KQRKR", "KRPKRP", "KQRBKN"}) bench_decoder(egtb_id);
 

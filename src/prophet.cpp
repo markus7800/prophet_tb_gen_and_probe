@@ -114,9 +114,7 @@ void prophet_tb_load_all_files() {
 size_t prophet_tb_get_size_on_disk_of_loaded_files() {
     size_t size = 0;
     for (EGTB* egtb : egtbs) {
-        if (egtb->compressed) {
-            size += egtb->CTB->compressed_filesize;
-        }
+        size += egtb->compressed_filesize();
     }
     return size;
 }
@@ -163,7 +161,10 @@ int16_t probe_position_raw_dctx(EGPosition &pos, DecompressCtx* dctx) {
 
     if (egtb != nullptr) {
         if (lazy_load) egtb->ensure_compressed_tb_initialised();
-        return egtb->query_postion_dctx(pos, dctx);
+        uint64_t ix = egtb->ix_from_pos(pos);
+        // a table split into parts may be incomplete
+        if (egtb->CTBs[egtb->part_of(ix)] == nullptr) return ERROR_TB_MISSING;
+        return egtb->get_value_dctx(ix, dctx);
     } else {
         EGMoveList movelist = EGMoveList(pos);
         if (movelist.size() == 0) {

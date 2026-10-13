@@ -43,14 +43,17 @@ int main(int argc, char *argv[]) {
         std::string egtb_filename = egtb_path.filename().u8string();
         std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
         EGTB egtb = EGTB(egtb_path.parent_path().u8string(), egtb_id);
+        int part = part_from_filename(egtb_filename);
+        uint64_t expected_num_pos = part >= 0 && egtb.split() && part < egtb.n_parts() ? egtb.part_size(part) : egtb.num_pos;
+        if ((part >= 0) != egtb.split() || part >= egtb.n_parts()) expected_num_pos = 0; // part file of a table that is not split or vice versa
 
         uint64_t checksum, num_pos, block_size;
         if (!read_compressed_header(egtb_path.u8string(), checksum, num_pos, block_size)) {
-            std::cout << egtb_id << " INCOMPLETE: could not read header." << std::endl;
-        } else if (num_pos != egtb.num_pos) {
-            std::cout << egtb_id << " INCOMPLETE: header has " << num_pos << " positions, expected " << egtb.num_pos << "." << std::endl;
+            std::cout << egtb_filename << " INCOMPLETE: could not read header." << std::endl;
+        } else if (num_pos != expected_num_pos) {
+            std::cout << egtb_filename << " INCOMPLETE: header has " << num_pos << " positions, expected " << expected_num_pos << "." << std::endl;
         } else if (!is_complete_compressed_file(egtb_path.u8string())) {
-            std::cout << egtb_id << " INCOMPLETE: file size does not match block size table." << std::endl;
+            std::cout << egtb_filename << " INCOMPLETE: file size does not match block size table." << std::endl;
         } else {
             complete[i] = true;
         }
@@ -71,36 +74,25 @@ int main(int argc, char *argv[]) {
     #pragma omp parallel for num_threads(nthreads) schedule(dynamic) reduction(&&:all_ok)
     for (uint i = 0; i < egtb_paths.size(); i++) {
         fs::path egtb_path = egtb_paths[i];
-        std::string egtb_folder = egtb_path.parent_path().u8string();
-        std::string egtb_filename = egtb_path.filename().u8string();;
-        std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
-        EGTB egtb = EGTB(egtb_folder, egtb_id);
-
+        std::string egtb_filename = egtb_path.filename().u8string();
         if (!complete[i]) {
             all_ok = false;
             #pragma omp critical
             {
                 count++;
-                std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_id << " ERROR (incomplete)" << std::endl;
+                std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_filename << " ERROR (incomplete)" << std::endl;
             }
             continue;
         }
-        if (!egtb.exists()) {
-            #pragma omp critical
-            {
-                count++;
-                std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_id << " does not exist." << std::endl;
-            }
-            continue;
-        }
-        egtb.init_compressed_tb();
-        bool ok = egtb.CTB->check_integrity(1);
+        // every file (part) is checked on its own
+        CompressedTB ctb(0, egtb_path.u8string());
+        bool ok = ctb.check_integrity(1);
         all_ok = all_ok && ok;
 
         #pragma omp critical
         {
             count++;
-            std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_id << (ok ? " OK" : " ERROR") << " (v" << egtb.CTB->version << ")" << std::endl;
+            std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_filename << (ok ? " OK" : " ERROR") << " (v" << ctb.version << ")" << std::endl;
         }
 
     }

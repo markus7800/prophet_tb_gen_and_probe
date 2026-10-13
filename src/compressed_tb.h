@@ -122,7 +122,7 @@ bool is_complete_compressed_file(std::string compressed_filename);
 void recompress_TB(std::string source_filename, std::string target_filename, int nthreads, int compression_level, uint64_t block_size, bool verbose);
 
 struct DecompressCtx {
-  int egtb_ix;
+  const void* ctb; // CompressedTB whose block is cached (a DecompressCtx may be shared across CompressedTBs)
   uint64_t uncompressed_block_ix;
   uint64_t buf_size;
   int16_t* uncompressed_buf;
@@ -130,7 +130,7 @@ struct DecompressCtx {
   ZSTD_DCtx* decompressor;
   uint64_t probe_count;
   DecompressCtx(uint64_t buf_size_ = 2097152) {
-    egtb_ix = 1001;
+    ctb = nullptr;
     uncompressed_block_ix = UINT64_MAX;
     buf_size = buf_size_;
     uncompressed_buf = (int16_t*) malloc(buf_size * sizeof(int16_t));
@@ -260,8 +260,8 @@ struct CompressedTB {
     uint64_t block_ix = ix / block_size;
     uint64_t ix_in_block = ix % block_size;
 
-    if (dctx->egtb_ix != egtb_ix || dctx->uncompressed_block_ix != block_ix) {
-      dctx->egtb_ix = egtb_ix; // DecompressCtx may be shared across CompressTB
+    if (dctx->ctb != this || dctx->uncompressed_block_ix != block_ix) {
+      dctx->ctb = this; // DecompressCtx may be shared across CompressedTBs
       dctx->uncompressed_block_ix = block_ix;
       if (!decompress_block(block_ix, dctx, dctx->uncompressed_buf)) {
         std::cerr << "Corrupt block " << block_ix << " in " << compressed_filename << std::endl;

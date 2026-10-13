@@ -91,6 +91,7 @@ int main(int argc, char *argv[]) {
             std::string filename = egtb_path.filename().u8string();
             if (egtb_id == filename.substr(0, filename.find_first_of("."))) {
                 egtb_paths.push_back(egtb_path);
+                break; // tables split into parts have several files
             }
         }
     }
@@ -131,7 +132,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (longest_mate == WIN_IN(0) + 1) {
-            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, "", -1, ""};
+            entries[i] = {egtb_id, egtb.num_pos, egtb.compressed_filesize(), "", -1, ""};
         } else {
             EGPosition pos;
             pos.reset();
@@ -151,7 +152,7 @@ int main(int argc, char *argv[]) {
                 probe_count += dctx->probe_count;
             }
 
-            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, pos.fen(), mate_in_dtm, mate_line};
+            entries[i] = {egtb_id, egtb.num_pos, egtb.compressed_filesize(), pos.fen(), mate_in_dtm, mate_line};
         }
 
         #pragma omp critical
