@@ -133,15 +133,16 @@ bool decode_block(const uint8_t* payload, uint64_t payload_size, uint64_t n, con
   return exceptions == end;
 }
 
-uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order) {
+uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order, uint64_t extra_flags) {
+  // about 2^20 values per chunk: large enough for few ordered writes, small enough for small per-thread buffers
   uint64_t chunk_size = block_size * std::max((uint64_t) 1, (uint64_t) (1 << 20) / block_size);
   auto fill = [TB](uint64_t start_ix, uint64_t n, int16_t* out) {
     memcpy(out, &TB[start_ix], n * sizeof(int16_t));
   };
-  return block_compress_stream(num_pos, chunk_size, fill, nthreads, compression_level, block_size, compressed_filename, write, verbose, digit_order);
+  return block_compress_stream(num_pos, chunk_size, fill, nthreads, compression_level, block_size, compressed_filename, write, verbose, digit_order, extra_flags);
 }
 
-uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const ValueFill& fill, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order) {
+uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const ValueFill& fill, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order, uint64_t extra_flags) {
   assert (chunk_size % block_size == 0);
   uint64_t tb_size_bytes = num_pos * sizeof(int16_t);
   uint64_t n_chunks = (num_pos + chunk_size - 1) / chunk_size;
@@ -149,12 +150,15 @@ uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const Valu
   uint64_t blocks_per_chunk = chunk_size / block_size;
 
   // pass 1: value frequencies (for the dictionary) and checksum
+  // every thread counts into its own histogram (65536 counters) which are added at the end; the checksum is a sum
+  // over all indices (see checksum_term), so it does not depend on which thread processes which chunk
   std::vector<uint64_t> counts(65536, 0);
   uint64_t checksum = 0;
   #pragma omp parallel num_threads(nthreads) reduction(+:checksum)
   {
     std::vector<int16_t> values(chunk_size);
     std::vector<uint64_t> local_counts(65536, 0);
+    // dynamic: the time of fill may vary between chunks
     #pragma omp for schedule(dynamic, 1)
     for (uint64_t chunk_ix = 0; chunk_ix < n_chunks; chunk_ix++) {
       uint64_t start_ix = chunk_ix * chunk_size;
@@ -171,19 +175,23 @@ uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const Valu
     }
   }
 
+  // global value dictionary (most frequent values first) and the code of every value (-1: escaped)
   ValueDict dict;
   value_dict_from_counts(counts.data(), dict);
   std::vector<int16_t> code_of(65536, -1);
   for (uint64_t i = 0; i < dict.size; i++) code_of[(uint16_t) dict.values[i]] = i;
   uint8_t escape_code = dict.size; // only used if dict.escape
 
+  // sizes of the file sections (see the .bz format in compressed_tb.h): the block size table has one UINT16 per block,
+  // or UINT32 if a block has more than 65535 values (then a compressed block may be larger than 65535 bytes)
   bool large_blocks = block_size > uint64_t(UINT16_MAX);
   uint64_t max_compressed_block_size = large_blocks ? UINT32_MAX : UINT16_MAX;
   uint64_t block_sizes_bytes = (large_blocks ? sizeof(uint32_t) : sizeof(uint16_t)) * n_blocks;
   uint64_t dict_bytes = (dict.size * sizeof(int16_t) + 7) / 8 * 8;
   uint64_t header_size = COMP_V2_HEADER_SIZE + sizeof(uint64_t) + dict_bytes + (digit_order != 0 ? sizeof(uint64_t) : 0);
 
-  // header and dictionary, the block size table is written after the blocks
+  // header and dictionary; the space of the block size table is skipped, because the compressed sizes are only known
+  // after pass 2, then the blocks are appended
   FILE* f = NULL;
   if (write) {
     f = fopen((compressed_filename + ".tmp").c_str(), "wb");
@@ -191,7 +199,7 @@ uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const Valu
       std::cerr << "Error opening file: " << compressed_filename << std::endl;
       exit(1);
     }
-    uint64_t flags = FLAG_RANK_ENCODED | (dict.escape ? FLAG_ESCAPE : 0) | (digit_order != 0 ? FLAG_DIGIT_ORDER : 0);
+    uint64_t flags = FLAG_RANK_ENCODED | (dict.escape ? FLAG_ESCAPE : 0) | (digit_order != 0 ? FLAG_DIGIT_ORDER : 0) | extra_flags;
     uint64_t header[7] = {COMP_MAGIC, COMP_VERSION, header_size, checksum, num_pos, block_size, flags};
     static_assert(sizeof(header) == COMP_V2_HEADER_SIZE);
     fwrite(header, sizeof(uint64_t), 7, f);
@@ -203,23 +211,28 @@ uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const Valu
     fseek(f, header_size + block_sizes_bytes, SEEK_SET);
   }
 
-  // pass 2: encode and compress, chunks are compressed in parallel and written in order
+  // pass 2: encode and compress; chunks are compressed in parallel and written in index order
   std::vector<uint64_t> block_sizes(n_blocks);
   uint64_t final_size = 0;
   #pragma omp parallel num_threads(nthreads)
   {
+    // per-thread buffers: values of a chunk, payload of one block (codes + escaped values, at most 3 bytes per value),
+    // and all compressed blocks of the chunk (worst case each block needs ZSTD_compressBound of its payload)
     std::vector<int16_t> values(chunk_size);
     std::vector<uint8_t> payload(3 * block_size);
     uint64_t max_block_bytes = ZSTD_compressBound(3 * block_size);
     std::vector<uint8_t> compressed(blocks_per_chunk * max_block_bytes);
     ZSTD_CCtx* cctx = ZSTD_createCCtx(); // reused for all blocks of this thread
 
+    // static, 1: chunk i goes to thread i % nthreads, so the chunks that are written next are always being compressed
+    // and a thread waits in the ordered section at most for the chunks of the other threads in the current round
     #pragma omp for ordered schedule(static, 1) reduction(+:final_size)
     for (uint64_t chunk_ix = 0; chunk_ix < n_chunks; chunk_ix++) {
       uint64_t chunk_start_ix = chunk_ix * chunk_size;
       uint64_t chunk_n = std::min(chunk_size, num_pos - chunk_start_ix);
       fill(chunk_start_ix, chunk_n, values.data());
 
+      // blocks of the chunk are compressed one after the other into the chunk buffer
       uint64_t compressed_bytes = 0;
       for (uint64_t offset = 0; offset < chunk_n; offset += block_size) {
         uint64_t block_ix = (chunk_start_ix + offset) / block_size;
@@ -241,6 +254,7 @@ uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const Valu
       }
       final_size += compressed_bytes;
 
+      // only one thread at a time, in chunk order: the blocks end up in index order in the file
       #pragma omp ordered
       {
         if (write) fwrite(compressed.data(), 1, compressed_bytes, f);
@@ -252,6 +266,7 @@ uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const Valu
   final_size += block_sizes_bytes + header_size;
 
   if (write) {
+    // fill in the block size table, then move the complete file to its final name
     fseek(f, header_size, SEEK_SET);
     if (large_blocks) {
       std::vector<uint32_t> write_block_sizes(block_sizes.begin(), block_sizes.end());
@@ -385,6 +400,7 @@ void recompress_TB(std::string source_filename, std::string target_filename, int
   }
 
   uint64_t digit_order = 0;
+  uint64_t extra_flags = 0;
   int16_t* TB = (int16_t*) malloc(num_pos * sizeof(int16_t));
   if (TB == NULL) {
     std::cerr << "Could not allocate " << num_pos * sizeof(int16_t) << " bytes." << std::endl;
@@ -395,11 +411,12 @@ void recompress_TB(std::string source_filename, std::string target_filename, int
     CompressedTB ctb = CompressedTB(0, source_filename);
     ctb.decompress_to_array(nthreads, TB); // exits if the checksum of the source does not match
     digit_order = ctb.digit_order; // the values are kept in the order of the file
+    extra_flags = ctb.flags & FLAG_CAPTURE_DC;
   }
   // the target is always written in the current version, whose checksum may differ from the source's
   uint64_t checksum = compute_checksum(TB, num_pos, nthreads);
   // writes to target_filename.tmp first and then moves it, so an interruption does not leave a partial file
-  block_compress_TB(TB, num_pos, nthreads, compression_level, block_size, target_filename, true, verbose, digit_order);
+  block_compress_TB(TB, num_pos, nthreads, compression_level, block_size, target_filename, true, verbose, digit_order, extra_flags);
   free(TB);
 
   uint64_t new_checksum, new_num_pos, new_block_size;

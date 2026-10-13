@@ -28,7 +28,7 @@ header_size UINT64 = number of bytes before BLOCK_SIZES (56, later versions may 
 checksum UINT64 (see compute_checksum)
 num_pos UINT64
 block_size UINT64
-flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE, FLAG_DIGIT_ORDER)
+flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE, FLAG_DIGIT_ORDER, FLAG_CAPTURE_DC)
 if flags & FLAG_RANK_ENCODED:
   dict_size UINT64 (number of values in the dictionary, at most 256, at most 255 if FLAG_ESCAPE)
   dict_size * INT16 dictionary values, zero-padded to a multiple of 8 bytes
@@ -59,6 +59,8 @@ Its checksum is the XOR of (ix << 10) | abs(value), see compute_checksum_v1.
 #define FLAG_RANK_ENCODED 1
 #define FLAG_ESCAPE 2
 #define FLAG_DIGIT_ORDER 4
+// values of positions whose value is obtained by a capture may be don't-cares, see capture_value.h (written by finalize)
+#define FLAG_CAPTURE_DC 8
 // maximal number of codes (dictionary values + escape code); lower values can be set at compile time to test the escape path
 #ifndef EGTB_MAX_DICT
 #define EGTB_MAX_DICT 256
@@ -112,15 +114,43 @@ bool decode_block(const uint8_t* payload, uint64_t payload_size, uint64_t n, con
 // dictionary from value frequencies counts[(uint16_t) value]
 void value_dict_from_counts(const uint64_t* counts, ValueDict& dict);
 
-// compresses TB to compressed_filename (TB is not modified), returns compressed size
-// digit_order != 0 is stored in the header (FLAG_DIGIT_ORDER), the values are written as they are
-uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0);
+// Compresses the num_pos values of TB to compressed_filename (TB is not modified) and returns the size of the file.
+// It is block_compress_stream with a fill that copies from TB (chunks of about 2^20 values).
+// digit_order != 0 and extra_flags are stored in the header (see block_compress_stream), the values are written as
+// they are.
+uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0, uint64_t extra_flags = 0);
 
-// writes the values of a table that is never fully in memory: fill(start_ix, n, out) has to write the values of
-// [start_ix, start_ix + n) to out; it is called twice for every chunk of chunk_size values (a multiple of block_size),
-// concurrently from nthreads threads (for different chunks)
+// Provides the values of a table to block_compress_stream: fill(start_ix, n, out) has to write the values of the
+// indices [start_ix, start_ix + n) to out[0..n). See block_compress_stream for when it is called.
 typedef std::function<void(uint64_t start_ix, uint64_t n, int16_t* out)> ValueFill;
-uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const ValueFill& fill, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0);
+
+/*
+Writes a compressed table (.bz format above) whose values are produced by fill, so that the table never has to be
+in memory as a whole (e.g. values computed from other data, or a table in memory in another index order).
+Returns the size of the file in bytes (also if write is false, then nothing is written).
+
+The values are processed in chunks of chunk_size indices (a multiple of block_size; the last chunk may be shorter).
+There are two passes over all chunks, each with nthreads threads that process different chunks concurrently:
+1. fill every chunk, count the frequency of every value (for the global value dictionary) and compute the checksum.
+   The header needs the dictionary and the checksum, and the blocks can only be encoded with the dictionary.
+2. fill every chunk again, rank-encode and zstd-compress its blocks (compression_level) into a buffer of the thread,
+   and append the buffer to the file. Chunks are compressed in parallel but written in index order (omp ordered).
+
+So fill is called exactly twice for every chunk, from different threads, and has to
+- return the same values both times (the checksum and dictionary of pass 1 have to match the blocks of pass 2),
+- be thread-safe for different chunks (e.g. use thread-local state or state local to the call).
+
+The file is written to compressed_filename + ".tmp" and renamed at the end, so an interrupted run never leaves an
+incomplete file under the final name. Layout while writing: header and dictionary first, then the space for the
+block size table is skipped, the compressed blocks are appended in order, and the block size table is filled in last.
+digit_order != 0 is stored in the header (FLAG_DIGIT_ORDER), extra_flags (e.g. FLAG_CAPTURE_DC) are added to the
+flags. The result is byte-identical to compressing the same values with any chunk size or number of threads.
+
+Memory: per thread chunk_size int16 values, the payload of one block (3 * block_size bytes) and the compressed
+blocks of one chunk (chunk_size / block_size * ZSTD_compressBound(3 * block_size) bytes), i.e. about 5 MiB per
+thread for chunks of 2^20 values and blocks of 32768 values; plus 8 bytes per block for the block sizes.
+*/
+uint64_t block_compress_stream(uint64_t num_pos, uint64_t chunk_size, const ValueFill& fill, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0, uint64_t extra_flags = 0);
 
 // parses a header of version 1 or 2 from the first n bytes of a file, returns false if invalid
 bool parse_compressed_header(const uint8_t* data, uint64_t n, CompressedHeader& header);

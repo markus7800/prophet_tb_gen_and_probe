@@ -96,6 +96,7 @@ void EGTB::init_compressed_tb() {
         );
         this->compressed = true;
         this->file_permuted = false;
+        this->capture_dc = this->CTB->flags & FLAG_CAPTURE_DC;
         if (this->CTB->digit_order != 0) {
             if (!unpack_digit_order(this->CTB->digit_order, stm_pieces, sntm_pieces, file_slots)) {
                 std::cerr << "Invalid digit order in " << this->get_filename() + COMP_EXT << std::endl;

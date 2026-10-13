@@ -39,6 +39,8 @@ struct EGTB {
     // digit order of the compressed file (finalized tables), values are read through file_ix
     std::vector<int> file_slots;
     bool file_permuted;
+    // stored values may be capture don't-cares (see capture_value.h), set when the compressed file is opened
+    bool capture_dc;
 
     // index layout for fast decoding (PosDecoder), created on first use
     IndexLayout* layout;
@@ -83,6 +85,7 @@ struct EGTB {
         TB = nullptr;
         CTB = nullptr;
         file_permuted = false;
+        capture_dc = false;
         layout = nullptr;
     }
 
@@ -189,6 +192,7 @@ struct EGTB {
             CTB = nullptr;
             compressed = false;
             file_permuted = false;
+            capture_dc = false;
         }
     }
     void ensure_compressed_tb_initialised() {

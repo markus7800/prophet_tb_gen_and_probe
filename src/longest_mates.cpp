@@ -118,6 +118,15 @@ int main(int argc, char *argv[]) {
             continue;
         }
         egtb.init_compressed_tb();
+        if (egtb.capture_dc) {
+            // stored values are not the true values of all positions (finalize), use the original tables
+            #pragma omp critical
+            {
+                std::cout << egtb_id << " has capture don't-cares, skipped (run on the tables before finalize)." << std::endl;
+            }
+            entries[i] = {egtb_id, egtb.num_pos, egtb.CTB->compressed_filesize, "", -2, ""};
+            continue;
+        }
 
         int16_t longest_mate = WIN_IN(0) + 1;
         uint64_t longest_mate_ix = 0;
@@ -125,6 +134,11 @@ int main(int argc, char *argv[]) {
         for (uint64_t ix = 0; ix < egtb.num_pos; ix++) {
             int16_t val = egtb.get_value(ix);
             if (0 < val && val < longest_mate) {
+                // values of unused indices may be copies of other values (finalize)
+                EGPosition candidate;
+                candidate.reset();
+                egtb.pos_at_ix(candidate, ix, WHITE);
+                if (!egtb.pos_ix_is_used(candidate, ix)) continue;
                 longest_mate = val;
                 longest_mate_ix = ix;
             }

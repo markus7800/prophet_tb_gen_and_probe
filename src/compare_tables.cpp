@@ -5,6 +5,9 @@
 #include <prophet.h>
 #include <prophet_common.h>
 #include "legacy_v1.h"
+#include "capture_value.h"
+#include <map>
+#include <mutex>
 #include "misc.h"
 #ifdef OMP
 #include <omp.h>
@@ -18,6 +21,9 @@ The reference tables are read with the frozen v1 index and file format (legacy_v
 current code. For every used position of a new table, its position is decoded, mapped to the reference index
 and the values have to be equal. Additionally, the number of used positions has to agree and [n_samples]
 random positions per table are probed through the prophet API (exercises the probing code path).
+For tables with capture don't-cares (finalize), a stored value that differs from the reference has to be worse
+than the reference value, and the best capture (computed with the reference capture tables) has to have the
+reference value.
 
 build/compare_tables.out [ref_root] [new_root] [threads] [n_samples] (optional: [egtb_id] ...)
 Returns 0 if all tables agree.
@@ -35,6 +41,36 @@ bool v1_pos_ix_is_used(EGPosition const &pos, uint64_t ix, int npieces, uint64_t
     if (ix >= num_nonep_pos && !pos.check_ep(pos.ep_square())) return false;
     return v1::ix_from_pos_(pos, kc) == ix;
 }
+
+// reference tables (v1) of capture targets, loaded on demand
+struct ReferenceTables {
+    std::string ref_root;
+    std::map<std::string, std::pair<std::vector<uint64_t>, std::vector<int16_t>>> tables; // id -> (poscounts, values)
+    std::mutex mutex;
+
+    // raw value of pos in the reference table (> WIN_IN(0) if not available)
+    int16_t value(const EGPosition& pos) {
+        int s[6] = {0}, n[6] = {0};
+        for (PieceType pt = PAWN; pt <= QUEEN; ++pt) { s[pt] = pos.count(pos.side_to_move(), pt); n[pt] = pos.count(~pos.side_to_move(), pt); }
+        std::string id = get_egtb_identifier(s, n);
+        std::pair<std::vector<uint64_t>, std::vector<int16_t>>* table;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            auto it = tables.find(id);
+            if (it == tables.end()) {
+                std::vector<uint64_t> kc(N_KKP + 1);
+                uint64_t nonep, ep, num;
+                v1::compute_poscounts(s, n, kc.data(), nonep, ep, num);
+                std::vector<int16_t> values(num);
+                std::string filename = get_default_folder(ref_root, s, n) + "/" + id + ".egtb" + COMP_EXT;
+                if (!v1::load_compressed_table(filename, num, values.data(), 1)) return 2 * WIN_IN(0);
+                it = tables.emplace(id, std::make_pair(kc, values)).first;
+            }
+            table = &it->second;
+        }
+        return table->second[v1::ix_from_pos_(pos, table->first.data())];
+    }
+};
 
 int main(int argc, char *argv[]) {
     if (argc < 5) {
@@ -87,6 +123,9 @@ int main(int argc, char *argv[]) {
             continue;
         }
         egtb.load_egtb_from_compressed_file(nthreads);
+        bool capture_dc = egtb.capture_dc;
+        ReferenceTables capture_tables;
+        capture_tables.ref_root = ref_root;
 
         // new -> reference: every used position has the same value
         uint64_t n_used = 0, n_mismatch = 0, first_mismatch = UINT64_MAX;
@@ -99,8 +138,17 @@ int main(int argc, char *argv[]) {
             n_used++;
             uint64_t ref_ix = v1::ix_from_pos_(pos, kc);
             if (egtb.TB[ix] != REF[ref_ix]) {
-                n_mismatch++;
-                first_mismatch = std::min(first_mismatch, ix);
+                bool ok = false;
+                if (capture_dc && egtb.TB[ix] < REF[ref_ix]) {
+                    // a capture don't-care: the best capture has the value
+                    int16_t capture_value;
+                    auto child = [&capture_tables](EGPosition& child_pos) { return capture_tables.value(child_pos); };
+                    ok = best_capture_value(pos, child, capture_value) == CAPTURE_VALUE && capture_value == REF[ref_ix];
+                }
+                if (!ok) {
+                    n_mismatch++;
+                    first_mismatch = std::min(first_mismatch, ix);
+                }
             }
         }
 
@@ -156,7 +204,7 @@ int main(int argc, char *argv[]) {
         egtb.free_tb();
 
         bool ok = n_mismatch == 0 && n_used == n_used_ref && n_probe_mismatch == 0;
-        std::cout << egtb_id << ": " << (ok ? "OK" : "FAILED") << " (used: " << n_used << "/" << n_used_ref
+        std::cout << egtb_id << ": " << (ok ? "OK" : "FAILED") << (capture_dc ? " [capture don't-cares]" : "") << " (used: " << n_used << "/" << n_used_ref
                   << ", mismatches: " << n_mismatch << ", probes: " << n_probe_mismatch << "/" << n_probed << " wrong";
         if (n_mismatch > 0) std::cout << ", first mismatch at ix " << first_mismatch;
         std::cout << ", " << (double) (now() - t_start) / 1000.0 << "s)" << std::endl;

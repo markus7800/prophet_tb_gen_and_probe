@@ -200,6 +200,14 @@ public:
         bytes_mmaped -= (egtb->num_pos * 2) * egtb->mmaped;
     }
 
+    // tables with capture don't-cares (finalize) do not store the true values of all positions
+    void require_true_values(EGTB* egtb) {
+        if (egtb->capture_dc) {
+            std::cerr << egtb->id << " is finalized with capture don't-cares, generation needs the original file." << std::endl;
+            exit(1);
+        }
+    }
+
     void allocate();
     void load_tb_dependencies(int nthreads, bool allocate_promotion_tb, bool verbose_when_disabled);
     void deallocate();
@@ -245,6 +253,7 @@ void GenEGTB::load_tb_dependencies(int nthreads, bool allocate_promotion_tb, boo
                         std::cout << "Already loaded ";
                     } else {
                         egtb->maybe_decompress_and_load_egtb(nthreads);
+                        require_true_values(egtb);
                         add_to_bytes_count(egtb);
                         std::cout << "Loaded ";
                     }
@@ -263,6 +272,7 @@ void GenEGTB::load_tb_dependencies(int nthreads, bool allocate_promotion_tb, boo
                         std::cout << "Already loaded ";
                     } else {
                         egtb->maybe_decompress_and_load_egtb(nthreads);
+                        require_true_values(egtb);
                         add_to_bytes_count(egtb);
                         std::cout << "Loaded ";
                     }
@@ -478,6 +488,7 @@ void GenEGTB::check_consistency_max_bytes_allocated(int nthreads, uint64_t max_b
                     }
                     std::cout << "Loading " << cap_egtb->id << " with " << cap_egtb->num_pos*2 / (1024*1024)  << " MiB to check consistency for " << LOSS_EGTB->id << "... ";
                     cap_egtb->maybe_decompress_and_load_egtb(nthreads);
+                    require_true_values(cap_egtb);
                     add_to_bytes_count(cap_egtb);
                     loaded_one_egtb = true;
                     std::cout << "(total allocated " << bytes_allocated / (1024*1024) << " MiB)" << std::endl;
@@ -670,6 +681,7 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
             EGTB* PROMO_EGTB = PROMO_EGTBS[promote_pt][capture_pt];
             // query from compressed file
             PROMO_EGTB->init_compressed_tb();
+            require_true_values(PROMO_EGTB);
             assert (PROMO_EGTB->CTB->block_size == BLOCKSIZE);
             if (PROMO_EGTB->file_permuted) {
                 // reading a finalized file in canonical index order would decompress a block for almost every value

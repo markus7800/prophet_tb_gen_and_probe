@@ -11,6 +11,7 @@
 #include "egtb.h"
 #include "egtb_ids.h"
 #include "compressed_tb.h"
+#include "capture_value.h"
 
 #include <filesystem>
 namespace fs = std::filesystem;
@@ -163,7 +164,15 @@ int16_t probe_position_raw_dctx(EGPosition &pos, DecompressCtx* dctx) {
 
     if (egtb != nullptr) {
         if (lazy_load) egtb->ensure_compressed_tb_initialised();
-        return egtb->query_postion_dctx(pos, dctx);
+        int16_t stored = egtb->query_postion_dctx(pos, dctx);
+        if (!egtb->capture_dc) return stored;
+        // the stored value may be a don't-care that is not better than the true value, which is then obtained by a capture
+        int16_t capture_value;
+        auto child = [dctx](EGPosition& child_pos) { return probe_position_raw_dctx(child_pos, dctx); };
+        CaptureValueStatus status = best_capture_value(pos, child, capture_value);
+        if (status == CAPTURE_TABLE_MISSING) return ERROR_TB_MISSING;
+        if (status == CAPTURE_VALUE) return std::max(stored, capture_value);
+        return stored;
     } else {
         EGMoveList movelist = EGMoveList(pos);
         if (movelist.size() == 0) {
