@@ -372,6 +372,8 @@ bool is_complete_compressed_file(std::string compressed_filename) {
   if (stat(compressed_filename.c_str(), &st) != 0) return false;
   uint64_t filesize = st.st_size;
 
+  if (header.flags & FLAG_UNCOMPRESSED) return filesize == header.header_size + num_pos * sizeof(int16_t);
+
   uint64_t n_blocks = ceil((double) num_pos / block_size);
   bool large_blocks = block_size > uint64_t(UINT16_MAX);
   uint64_t block_size_bytes = large_blocks ? sizeof(uint32_t) : sizeof(uint16_t);
@@ -390,6 +392,23 @@ bool is_complete_compressed_file(std::string compressed_filename) {
     expected_size += large_blocks ? ((uint32_t*) block_sizes.data())[i] : ((uint16_t*) block_sizes.data())[i];
   }
   return filesize == expected_size;
+}
+
+void write_uncompressed_TB(const int16_t* TB, uint64_t num_pos, uint64_t block_size, uint64_t extra_flags, std::string filename, int nthreads) {
+  uint64_t checksum = compute_checksum(TB, num_pos, nthreads);
+  uint64_t flags = FLAG_UNCOMPRESSED | extra_flags;
+  uint64_t header[7] = {COMP_MAGIC, COMP_VERSION, COMP_V2_HEADER_SIZE, checksum, num_pos, block_size, flags};
+  static_assert(sizeof(header) == COMP_V2_HEADER_SIZE);
+  std::string tmp_filename = filename + ".tmp";
+  FILE* f = fopen(tmp_filename.c_str(), "wb");
+  if (f == NULL || fwrite(header, sizeof(uint64_t), 7, f) != 7 || fwrite(TB, sizeof(int16_t), num_pos, f) != num_pos || fclose(f) != 0) {
+    std::cerr << "Could not write " << tmp_filename << std::endl;
+    exit(1);
+  }
+  if (rename(tmp_filename.c_str(), filename.c_str()) != 0) {
+    std::cerr << "Could not rename " << tmp_filename << " to " << filename << std::endl;
+    exit(1);
+  }
 }
 
 void recompress_TB(std::string source_filename, std::string target_filename, int nthreads, int compression_level, uint64_t block_size, bool verbose) {

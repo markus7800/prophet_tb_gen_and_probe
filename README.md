@@ -64,6 +64,15 @@ You can probe your positions from the [analysis board](https://lichess.org/analy
 
 ## Downloads 
 
+To probe some tables uncompressed (e.g. 5-men, about 2 bytes per position), decompress them:
+```
+make prophet
+make recompress
+./build/recompress.out --decompress egtbs/5men egtbs_raw/5men [threads]
+```
+The decompressed files keep the `.egtb.bz` names, but their header marks them as uncompressed, and prophet reads their
+values from the mmaped file directly. Add `egtbs_raw/5men` instead of `egtbs/5men` with `prophet_tb_add_path`.
+
 If you have downloaded files you can check their integrity with
 ```
 make prophet

@@ -13,6 +13,7 @@
 #include <sys/mman.h> // mmap
 #include <sys/stat.h> // file size
 #include <cstdint>
+#include <cstring>
 #include <stdio.h>
 #include <functional>
 
@@ -28,7 +29,7 @@ header_size UINT64 = number of bytes before BLOCK_SIZES (56, later versions may 
 checksum UINT64 (see compute_checksum)
 num_pos UINT64
 block_size UINT64
-flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE, FLAG_DIGIT_ORDER, FLAG_CAPTURE_DC)
+flags UINT64 (FLAG_RANK_ENCODED, FLAG_ESCAPE, FLAG_DIGIT_ORDER, FLAG_CAPTURE_DC, FLAG_UNCOMPRESSED)
 if flags & FLAG_RANK_ENCODED:
   dict_size UINT64 (number of values in the dictionary, at most 256, at most 255 if FLAG_ESCAPE)
   dict_size * INT16 dictionary values, zero-padded to a multiple of 8 bytes
@@ -51,6 +52,10 @@ with FLAG_RANK_ENCODED, a block is the zstd-compressed payload:
   follow the n codes in order of occurrence
 The dictionary is global for the table and sorted by decreasing frequency.
 
+With FLAG_UNCOMPRESSED (written by recompress --decompress), the file has no dictionary, digit order or block sizes:
+the header is followed by num_pos * INT16 values (canonical index order), so that the values can be read from the
+mmaped file directly. block_size is kept for code that processes the table block by block.
+
 Legacy version 1 (read-only) has no magic and a 3 x UINT64 header: checksum, num_pos, block_size.
 Its checksum is the XOR of (ix << 10) | abs(value), see compute_checksum_v1.
 */
@@ -61,6 +66,7 @@ Its checksum is the XOR of (ix << 10) | abs(value), see compute_checksum_v1.
 #define FLAG_DIGIT_ORDER 4
 // values of positions whose value is obtained by a capture may be don't-cares, see capture_value.h (written by finalize)
 #define FLAG_CAPTURE_DC 8
+#define FLAG_UNCOMPRESSED 16
 // maximal number of codes (dictionary values + escape code); lower values can be set at compile time to test the escape path
 #ifndef EGTB_MAX_DICT
 #define EGTB_MAX_DICT 256
@@ -119,6 +125,10 @@ void value_dict_from_counts(const uint64_t* counts, ValueDict& dict);
 // digit_order != 0 and extra_flags are stored in the header (see block_compress_stream), the values are written as
 // they are.
 uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose, uint64_t digit_order = 0, uint64_t extra_flags = 0);
+
+// Writes the num_pos values of TB uncompressed (FLAG_UNCOMPRESSED, see the .bz format) to filename.tmp and renames
+// it to filename. extra_flags (e.g. FLAG_CAPTURE_DC) are added to the flags.
+void write_uncompressed_TB(const int16_t* TB, uint64_t num_pos, uint64_t block_size, uint64_t extra_flags, std::string filename, int nthreads);
 
 // Provides the values of a table to block_compress_stream: fill(start_ix, n, out) has to write the values of the
 // indices [start_ix, start_ix + n) to out[0..n). See block_compress_stream for when it is called.
@@ -211,6 +221,7 @@ struct CompressedTB {
   uint8_t* map_ptr;
   uint8_t* compressed_blocks;
   DecompressCtx* decompress_ctx;
+  const int16_t* values; // flags & FLAG_UNCOMPRESSED: the values in the mmaped file, nullptr otherwise
   ValueDict dict; // only used if flags & FLAG_RANK_ENCODED
   uint64_t digit_order; // 0 if the index of the file has the canonical digit order
 
@@ -252,7 +263,22 @@ struct CompressedTB {
     this->num_pos = header.num_pos;
     this->block_size = header.block_size;
     this->n_blocks = ceil((double) num_pos / block_size);
-    
+    decompress_ctx = nullptr;
+
+    if (this->flags & FLAG_UNCOMPRESSED) {
+      if (headersize % sizeof(int16_t) != 0 || this->compressed_filesize != headersize + num_pos * sizeof(int16_t)) {
+        printf("Invalid size of uncompressed file %s.\n", this->compressed_filename.c_str());
+        exit(EXIT_FAILURE);
+      }
+      this->values = (const int16_t*) &this->map_ptr[headersize];
+      this->large_blocks = false;
+      this->block_sizes_ptr = nullptr;
+      this->compressed_blocks = nullptr;
+      this->sparse_block_offsets = nullptr;
+      return;
+    }
+    this->values = nullptr;
+
     this->large_blocks = block_size > uint64_t(UINT16_MAX);
     this->block_sizes_ptr = &this->map_ptr[headersize];
     this->compressed_blocks = &this->map_ptr[headersize + this->n_blocks * (large_blocks ? sizeof(uint32_t) : sizeof(uint16_t))];
@@ -265,7 +291,6 @@ struct CompressedTB {
       offset += this->get_block_size(block_ix);
     }
 
-    decompress_ctx = nullptr;
     // std::cout << "CompressedEGTB" << this->egtb_id << ": filesize=" << this->filesize << ", num_pos=" << this->num_pos << ", block_size=" << this->block_size << ", n_blocks=" << this->n_blocks << std::endl;
   }
 
@@ -303,8 +328,9 @@ struct CompressedTB {
   
   // thread-safe
   int16_t get_value_dctx(uint64_t ix, DecompressCtx* dctx) {
-    assert (dctx->buf_size >= block_size);
     dctx->probe_count++;
+    if (values != nullptr) return values[ix];
+    assert (dctx->buf_size >= block_size);
 
     uint64_t block_ix = ix / block_size;
     uint64_t ix_in_block = ix % block_size;
@@ -330,6 +356,10 @@ struct CompressedTB {
   bool decompress_block(uint64_t block_ix, DecompressCtx* dctx, int16_t* out) const {
     assert (dctx->buf_size >= block_size);
     uint64_t n = get_block_npos(block_ix);
+    if (values != nullptr) {
+      memcpy(out, &values[block_ix * block_size], n * sizeof(int16_t));
+      return true;
+    }
     const uint8_t* src = &compressed_blocks[get_block_offset(block_ix)];
     uint64_t src_size = get_block_size(block_ix);
     if (flags & FLAG_RANK_ENCODED) {

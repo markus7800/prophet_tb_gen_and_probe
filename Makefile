@@ -68,8 +68,8 @@ gen: lib | build
 compress: | build
 	$(CC) -g $(flags) -o build/compress_files.out src/compress_files.cpp $(corefiles) $(lzstd)
 
-recompress: | build
-	$(CC) -g $(flags) -o build/recompress.out src/recompress.cpp src/compressed_tb.cpp $(lzstd)
+recompress: lib | build
+	$(CC) -g $(flags) -o build/recompress.out src/recompress.cpp $(corefiles) $(lzstd)
 
 prophet: lib | build
 	$(CC) -g $(flags) -shared -o build/libprophet.so src/prophet.cpp $(corefiles) $(lzstd)
