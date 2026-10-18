@@ -27,8 +27,11 @@ an older format version (v1, which is converted), and it is verified against the
 the original file.
 
 build/finalize.out [folder] [threads] (options) (optional: [egtb_id] ...)
-  --out DIR           write the finalized files to DIR (same folder structure) instead of replacing them; files that
-                      are not rewritten are copied, so that DIR is a complete set (probing needs the capture tables)
+  --out DIR           write the finalized files to DIR (same folder structure relative to [folder]) instead of
+                      replacing them; files that are not rewritten are copied, so that DIR is a complete set of the
+                      processed files (probing needs the capture tables)
+  --root DIR          root of the table set ([root]/<n>men/<k>pawns) in which the capture tables are looked up
+                      (default [folder]), so that [folder] can be a subfolder, e.g. egtbs/5men with --root egtbs
   --level L           zstd level of the finalized files and of the estimation (default 19)
   --sample-blocks N   number of blocks that are test-compressed per variant (default 256)
   --min-gain G        rewrite a file only if it is estimated to be smaller by G (default 0.01)
@@ -39,12 +42,17 @@ build/finalize.out [folder] [threads] (options) (optional: [egtb_id] ...)
 Tables are processed in reverse generation order: the capture tables of a table (fewer pieces) are processed after
 it, so they still have their original values when replacing files in place. Files that are already finalized are
 skipped, files that would not get smaller stay unchanged (and are estimated again on the next run).
+Every table needs the original values of its capture tables (one piece fewer) from [root], i.e. they must not have
+capture don't-cares yet. The finalized set does not have to be closed: only the capture tables have to exist in
+[root]. When replacing files in place over several runs, finalize the tables with more pieces first (e.g. 6-men
+before 5-men); with --out and the originals in [root], any order works.
 Finalized tables can be probed and (without capture don't-cares) loaded, but the generator needs the original files
 of all dependencies with capture don't-cares, and of promotion tables with a changed digit order.
 */
 
 struct Options {
     std::string out_dir;
+    std::string root; // empty: [folder]
     int level = 19;
     uint64_t sample_blocks = 256;
     double min_gain = 0.01;
@@ -116,7 +124,7 @@ bool load_capture_tables(EGTB& egtb, const std::string& root, int nthreads, std:
         if (tables.count(key)) continue;
         EGTB* table = new EGTB(child.first.data(), child.second.data(), root);
         if (!table->exists()) {
-            std::cerr << "Missing capture table " << table->id << " of " << egtb.id << std::endl;
+            std::cerr << "Missing capture table " << table->id << " of " << egtb.id << " in " << table->folder << " (see --root)." << std::endl;
             delete table;
             return false;
         }
@@ -257,7 +265,7 @@ uint64_t verify_file(const TableInfo& info, const std::string& filename, const V
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        std::cerr << "usage: finalize.out [folder] [threads] (--out DIR) (--level L) (--sample-blocks N) (--min-gain G) (--dc-min-gain G) (--no-dc) (--dry-run) (egtb_id ...)" << std::endl;
+        std::cerr << "usage: finalize.out [folder] [threads] (--out DIR) (--root DIR) (--level L) (--sample-blocks N) (--min-gain G) (--dc-min-gain G) (--no-dc) (--dry-run) (egtb_id ...)" << std::endl;
         return 2;
     }
     std::string folder = argv[1];
@@ -270,6 +278,7 @@ int main(int argc, char *argv[]) {
     for (int i = 3; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--out" && i + 1 < argc) opt.out_dir = argv[++i];
+        else if (arg == "--root" && i + 1 < argc) opt.root = argv[++i];
         else if (arg == "--level" && i + 1 < argc) opt.level = atoi(argv[++i]);
         else if (arg == "--sample-blocks" && i + 1 < argc) opt.sample_blocks = strtoull(argv[++i], NULL, 10);
         else if (arg == "--min-gain" && i + 1 < argc) opt.min_gain = atof(argv[++i]);
@@ -277,6 +286,13 @@ int main(int argc, char *argv[]) {
         else if (arg == "--no-dc") opt.use_dc = false;
         else if (arg == "--dry-run") opt.dry_run = true;
         else ids.insert(arg);
+    }
+    while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
+    if (opt.root.empty()) opt.root = folder;
+    while (opt.root.size() > 1 && opt.root.back() == '/') opt.root.pop_back(); // get_default_folder needs no trailing /
+    if (!fs::is_directory(folder) || !fs::is_directory(opt.root)) {
+        std::cerr << "Folder " << folder << " or root " << opt.root << " is not a directory." << std::endl;
+        return 2;
     }
 
     Bitboards::init();
@@ -340,9 +356,13 @@ int main(int argc, char *argv[]) {
         if (1.0 - (double) order_estimates[best] / order_estimates[0] < opt.min_gain) best = 0;
         const std::vector<int>& order = orders[best];
 
-        // 2. don't-cares in that order (capture tables are read from the input folder)
+        // 2. don't-cares in that order (capture tables are read from the root folder)
         std::unordered_map<uint32_t, EGTB*> capture_tables;
-        if (!load_capture_tables(egtb, folder, nthreads, capture_tables)) return 1;
+        if (!load_capture_tables(egtb, opt.root, nthreads, capture_tables)) {
+            for (auto& kv : capture_tables) { kv.second->free_tb(); delete kv.second; }
+            egtb.free_tb();
+            return 1;
+        }
         compute_bits(info, capture_tables, nthreads);
         for (auto& kv : capture_tables) { kv.second->free_tb(); delete kv.second; }
         std::vector<Variant> fill_variants = {{order, true, false}, {order, true, true}};
@@ -390,6 +410,7 @@ int main(int argc, char *argv[]) {
         if (n_wrong != 0) {
             std::cerr << std::endl << "Verification of " << tmp << " failed (" << n_wrong << " wrong values), " << path << " is unchanged." << std::endl;
             fs::remove(tmp);
+            egtb.free_tb();
             return 1;
         }
         egtb.free_tb();
