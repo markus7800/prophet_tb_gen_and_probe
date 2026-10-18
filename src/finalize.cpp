@@ -22,8 +22,9 @@ Finalizes generated tables for distribution. Per table file:
    (capture don't-cares, see capture_value.h) are replaced by the previous value if that is not better than the true
    value; probing then returns max(stored value, best capture). Capture don't-cares are enabled if they make the
    sample at least --dc-min-gain smaller (FLAG_CAPTURE_DC).
-The file is rewritten if the result is estimated to be at least --min-gain smaller than the original, and it is
-verified against the original values before it replaces the original file.
+The file is rewritten if the result is estimated to be at least --min-gain smaller than the original, or if it has
+an older format version (v1, which is converted), and it is verified against the original values before it replaces
+the original file.
 
 build/finalize.out [folder] [threads] (options) (optional: [egtb_id] ...)
   --out DIR           write the finalized files to DIR (same folder structure) instead of replacing them; files that
@@ -356,7 +357,10 @@ int main(int argc, char *argv[]) {
                   << -100.0 * (1.0 - (double) fill_estimates[1] / fill_estimates[0]) << "%, " << (use_dc ? "used" : "not used")
                   << "), estimated " << -100.0 * gain << "%";
 
-        if (opt.dry_run || gain < opt.min_gain) {
+        // files of an older format version (v1) are always rewritten, so that the set is in the current version
+        bool old_version = egtb.CTB->version != COMP_VERSION;
+        if (old_version) std::cout << ", converted from v" << egtb.CTB->version;
+        if (opt.dry_run || (gain < opt.min_gain && !old_version)) {
             // the file stays as it is (not marked as finalized)
             std::cout << (!opt.dry_run ? ", file unchanged" : "") << std::endl;
             if (!opt.dry_run) { total_before += size_before; total_after += size_before; n_kept++; }
