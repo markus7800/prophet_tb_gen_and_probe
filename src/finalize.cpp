@@ -37,7 +37,8 @@ build/finalize.out [folder] [threads] (options) (optional: [egtb_id] ...)
   --min-gain G        rewrite a file only if it is estimated to be smaller by G (default 0.01)
   --dc-min-gain G     use capture don't-cares only if they are estimated to save G (default 0.10)
   --no-dc             never use capture don't-cares
-  --dry-run           only estimate, do not write
+  --dry-run           only estimate, do not write; the summary adds up the estimated sizes (file size scaled by the
+                      estimated gain of the files that would be rewritten)
 
 Tables are processed in reverse generation order: the capture tables of a table (fewer pieces) are processed after
 it, so they still have their original values when replacing files in place. Files that are already finalized are
@@ -328,6 +329,8 @@ int main(int argc, char *argv[]) {
     };
 
     uint64_t total_before = 0, total_after = 0, n_changed = 0, n_skipped = 0, n_kept = 0, n_dc = 0;
+    // --dry-run: sizes of the files that would be rewritten or kept, and how many
+    uint64_t est_before = 0, est_after = 0, est_rewritten = 0, est_dc = 0, est_kept = 0;
     TimePoint t0 = now();
     for (const fs::path& path : files) {
         TimePoint t_start = now();
@@ -380,10 +383,20 @@ int main(int argc, char *argv[]) {
         // files of an older format version (v1) are always rewritten, so that the set is in the current version
         bool old_version = egtb.CTB->version != COMP_VERSION;
         if (old_version) std::cout << ", converted from v" << egtb.CTB->version;
-        if (opt.dry_run || (gain < opt.min_gain && !old_version)) {
+        bool rewrite = gain >= opt.min_gain || old_version;
+        if (opt.dry_run) {
+            uint64_t size_estimate = rewrite ? (uint64_t) std::llround(size_before * std::max(0.0, 1.0 - gain)) : size_before;
+            est_before += size_before;
+            est_after += size_estimate;
+            if (rewrite) { est_rewritten++; est_dc += use_dc; } else { est_kept++; }
+            std::cout << (rewrite ? ", would be rewritten" : ", would stay unchanged") << std::endl;
+            egtb.free_tb();
+            continue;
+        }
+        if (!rewrite) {
             // the file stays as it is (not marked as finalized)
-            std::cout << (!opt.dry_run ? ", file unchanged" : "") << std::endl;
-            if (!opt.dry_run) { total_before += size_before; total_after += size_before; n_kept++; }
+            std::cout << ", file unchanged" << std::endl;
+            total_before += size_before; total_after += size_before; n_kept++;
             egtb.free_tb();
             copy_unchanged(path);
             continue;
@@ -426,6 +439,14 @@ int main(int argc, char *argv[]) {
                   << "%) in " << (double) (now() - t_start) / 1000.0 << "s" << std::endl;
     }
 
+    if (opt.dry_run) {
+        std::cout << "Dry run: " << files.size() - n_skipped << " files (" << est_rewritten << " would be rewritten, " << est_dc
+                  << " of them with capture don't-cares, " << est_kept << " unchanged, " << n_skipped << " already finalized): "
+                  << est_before << " -> estimated " << est_after << " bytes";
+        if (est_before > 0) std::cout << " (" << -100.0 * (1.0 - (double) est_after / est_before) << "%)";
+        std::cout << " in " << (double) (now() - t0) / 1000.0 << "s." << std::endl;
+        return 0;
+    }
     std::cout << "Finalized " << files.size() - n_skipped << " files (" << n_changed << " rewritten, " << n_dc << " of them with capture don't-cares, "
               << n_kept << " unchanged, " << n_skipped << " already finalized): " << total_before << " -> " << total_after << " bytes";
     if (total_before > 0) std::cout << " (" << -100.0 * (1.0 - (double) total_after / total_before) << "%)";
