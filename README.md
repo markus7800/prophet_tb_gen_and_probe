@@ -22,7 +22,7 @@ First, you need to build [zstd](https://github.com/facebook/zstd).
 ```
 git submodule update --init
 cd zstd
-make
+CFLAGS="-fPIC" CXXFLAGS="-fPIC" make
 cd ..
 ```
 

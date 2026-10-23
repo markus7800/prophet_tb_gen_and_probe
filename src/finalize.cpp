@@ -38,7 +38,9 @@ build/finalize.out [folder] [threads] (options) (optional: [egtb_id] ...)
   --dc-min-gain G     use capture don't-cares only if they are estimated to save G (default 0.10)
   --no-dc             never use capture don't-cares
   --dry-run           only estimate, do not write; the summary adds up the estimated sizes (file size scaled by the
-                      estimated gain of the files that would be rewritten)
+                      estimated gain of the files that would be rewritten). Only the blocks of the table that
+                      the sample needs (in any digit order) are decompressed, and the don't-cares are only computed
+                      for the sample, so the capture don't-care percentage is that of the sample
 
 Tables are processed in reverse generation order: the capture tables of a table (fewer pieces) are processed after
 it, so they still have their original values when replacing files in place. Files that are already finalized are
@@ -142,8 +144,10 @@ bool load_capture_tables(EGTB& egtb, const std::string& root, int nthreads, std:
     return true;
 }
 
-// marks used positions and positions whose value is obtained by a capture
-void compute_bits(TableInfo& info, const std::unordered_map<uint32_t, EGTB*>& tables, int nthreads) {
+// marks used positions and positions whose value is obtained by a capture; with a sample (--dry-run), only the
+// positions of the sample blocks in the given order are classified (the others stay unused)
+void compute_bits(TableInfo& info, const std::unordered_map<uint32_t, EGTB*>& tables, int nthreads,
+                  const std::vector<uint64_t>* sample = nullptr, const std::vector<int>* order = nullptr, uint64_t block_size = 0) {
     EGTB& egtb = *info.egtb;
     info.used.resize(egtb.num_pos);
     info.capture_dc.resize(egtb.num_pos);
@@ -155,6 +159,45 @@ void compute_bits(TableInfo& info, const std::unordered_map<uint32_t, EGTB*>& ta
         EGTB* table = it->second;
         return table->TB[table->ix_from_pos(pos)];
     };
+    // 0: unused, 1: used, 2: used and capture don't-care
+    auto classify = [&egtb, &child](PosDecoder& decoder, uint64_t ix) -> int {
+        EGPosition pos;
+        decoder.pos_at_ix(pos, ix);
+        if (!egtb.pos_ix_is_used(pos, ix)) return 0;
+        int16_t capture_value;
+        CaptureValueStatus status = best_capture_value(pos, child, capture_value);
+        assert (status != CAPTURE_TABLE_MISSING);
+        return status == CAPTURE_VALUE && capture_value == egtb.TB[ix] ? 2 : 1;
+    };
+    if (sample != nullptr) {
+        #pragma omp parallel num_threads(nthreads) reduction(+:n_used,n_capture_dc)
+        {
+            PosDecoder decoder(layout, WHITE);
+            DigitCursor cursor(egtb.stm_pieces, egtb.sntm_pieces, egtb.kntm_poscounts, egtb.num_nonep_pos, *order);
+            #pragma omp for schedule(dynamic, 1)
+            for (uint64_t s = 0; s < sample->size(); s++) {
+                uint64_t start = (*sample)[s] * block_size;
+                uint64_t n = std::min(block_size, egtb.num_pos - start);
+                for (uint64_t i = 0; i < n; i++) {
+                    uint64_t ix = cursor.to_canonical(start + i);
+                    int c = classify(decoder, ix);
+                    if (c == 0) continue;
+                    uint64_t bit = 1ULL << (ix % 64);
+                    #pragma omp atomic
+                    info.used.words[ix / 64] |= bit;
+                    n_used++;
+                    if (c == 2) {
+                        #pragma omp atomic
+                        info.capture_dc.words[ix / 64] |= bit;
+                        n_capture_dc++;
+                    }
+                }
+            }
+        }
+        info.n_used = n_used;
+        info.n_capture_dc = n_capture_dc;
+        return;
+    }
     uint64_t n_words = info.used.words.size();
     #pragma omp parallel num_threads(nthreads) reduction(+:n_used,n_capture_dc)
     {
@@ -163,15 +206,11 @@ void compute_bits(TableInfo& info, const std::unordered_map<uint32_t, EGTB*>& ta
         for (uint64_t w = 0; w < n_words; w++) {
             uint64_t used_word = 0, dc_word = 0;
             for (uint64_t ix = w * 64; ix < std::min(egtb.num_pos, (w + 1) * 64); ix++) {
-                EGPosition pos;
-                decoder.pos_at_ix(pos, ix);
-                if (!egtb.pos_ix_is_used(pos, ix)) continue;
+                int c = classify(decoder, ix);
+                if (c == 0) continue;
                 used_word |= 1ULL << (ix % 64);
                 n_used++;
-                int16_t capture_value;
-                CaptureValueStatus status = best_capture_value(pos, child, capture_value);
-                assert (status != CAPTURE_TABLE_MISSING);
-                if (status == CAPTURE_VALUE && capture_value == egtb.TB[ix]) {
+                if (c == 2) {
                     dc_word |= 1ULL << (ix % 64);
                     n_capture_dc++;
                 }
@@ -191,17 +230,82 @@ struct Variant {
     bool use_dc;
 };
 
-// estimated compressed size of the same sample of blocks for every variant
-std::vector<uint64_t> estimate(const TableInfo& info, const std::vector<Variant>& variants, uint64_t block_size, const Options& opt, int nthreads) {
-    const EGTB& egtb = *info.egtb;
-    uint64_t n_blocks = (egtb.num_pos + block_size - 1) / block_size;
+// file blocks that are test-compressed for every variant
+std::vector<uint64_t> sample_blocks(uint64_t num_pos, uint64_t block_size, const Options& opt) {
+    uint64_t n_blocks = (num_pos + block_size - 1) / block_size;
     std::vector<uint64_t> sample;
     uint64_t k = std::min(n_blocks, opt.sample_blocks);
     for (uint64_t i = 0; i < k; i++) sample.push_back(i * n_blocks / k);
+    return sample;
+}
 
-    // dictionary of the original values (filled values are copies of other values, except for 0 at a block start)
-    ValueDict dict;
-    build_value_dict(egtb.TB, egtb.num_pos, nthreads, dict);
+// --dry-run: canonical blocks that contain the values of the sample blocks in any of the orders
+std::vector<uint8_t> needed_blocks(const EGTB& egtb, const std::vector<std::vector<int>>& orders, const std::vector<uint64_t>& sample, uint64_t block_size, int nthreads) {
+    uint64_t n_blocks = (egtb.num_pos + block_size - 1) / block_size;
+    std::vector<uint8_t> needed(n_blocks, 0);
+    uint64_t n_tasks = orders.size() * sample.size();
+    #pragma omp parallel num_threads(nthreads)
+    {
+        std::vector<uint8_t> local(n_blocks, 0);
+        #pragma omp for schedule(dynamic, 1)
+        for (uint64_t task = 0; task < n_tasks; task++) {
+            DigitCursor cursor(egtb.stm_pieces, egtb.sntm_pieces, egtb.kntm_poscounts, egtb.num_nonep_pos, orders[task / sample.size()]);
+            uint64_t start = sample[task % sample.size()] * block_size;
+            uint64_t n = std::min(block_size, egtb.num_pos - start);
+            for (uint64_t i = 0; i < n; i++) local[cursor.to_canonical(start + i) / block_size] = 1;
+        }
+        #pragma omp critical
+        {
+            for (uint64_t b = 0; b < n_blocks; b++) needed[b] |= local[b];
+        }
+    }
+    return needed;
+}
+
+// --dry-run: loads only the needed blocks of the (canonical) file, the other values stay 0 (their pages are never
+// touched, so they take no memory). dict is the value dictionary of the file (built from all values), or of the
+// loaded values if the file has none. Returns the number of loaded blocks.
+uint64_t load_blocks(EGTB& egtb, const std::vector<uint8_t>& needed, int nthreads, ValueDict& dict) {
+    CompressedTB* ctb = egtb.CTB;
+    assert (!egtb.file_permuted && !egtb.loaded && egtb.TB == nullptr);
+    egtb.TB = (int16_t*) calloc(egtb.num_pos, sizeof(int16_t));
+    std::vector<uint64_t> counts(65536, 0);
+    uint64_t n_loaded = 0;
+    bool corrupt = false;
+    #pragma omp parallel num_threads(nthreads) reduction(+:n_loaded) reduction(||:corrupt)
+    {
+        DecompressCtx dctx(ctb->block_size);
+        std::vector<uint64_t> local_counts(65536, 0);
+        #pragma omp for schedule(dynamic, 16)
+        for (uint64_t block_ix = 0; block_ix < needed.size(); block_ix++) {
+            if (!needed[block_ix]) continue;
+            int16_t* out = &egtb.TB[block_ix * ctb->block_size];
+            if (!ctb->decompress_block(block_ix, &dctx, out)) { corrupt = true; continue; }
+            for (uint64_t i = 0; i < ctb->get_block_npos(block_ix); i++) local_counts[(uint16_t) out[i]]++;
+            n_loaded++;
+        }
+        #pragma omp critical
+        {
+            for (int v = 0; v < 65536; v++) counts[v] += local_counts[v];
+        }
+    }
+    if (corrupt) {
+        std::cerr << "Corrupt file " << ctb->compressed_filename << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    egtb.mmaped = false;
+    egtb.loaded = true;
+    egtb.filesize = egtb.num_pos * sizeof(int16_t);
+    if (ctb->flags & FLAG_RANK_ENCODED) dict = ctb->dict;
+    else value_dict_from_counts(counts.data(), dict);
+    return n_loaded;
+}
+
+// estimated compressed size of the same sample of blocks for every variant
+// dict is the dictionary of the original values (filled values are copies of other values, except for 0 at a block start)
+std::vector<uint64_t> estimate(const TableInfo& info, const std::vector<Variant>& variants, const std::vector<uint64_t>& sample,
+                               uint64_t block_size, const ValueDict& dict, const Options& opt, int nthreads) {
+    const EGTB& egtb = *info.egtb;
     std::vector<int16_t> code_of(65536, -1);
     for (uint64_t i = 0; i < dict.size; i++) code_of[(uint16_t) dict.values[i]] = i;
 
@@ -346,15 +450,24 @@ int main(int argc, char *argv[]) {
         }
         uint64_t block_size = egtb.CTB->block_size;
         uint64_t size_before = fs::file_size(path);
-        egtb.load_egtb_from_compressed_file(nthreads);
+        std::vector<std::vector<int>> orders = all_digit_orders(egtb.stm_pieces, egtb.sntm_pieces);
+        std::vector<uint64_t> sample = sample_blocks(egtb.num_pos, block_size, opt);
+        ValueDict dict;
+        uint64_t n_loaded = 0;
+        if (opt.dry_run) {
+            // only the blocks that the estimate reads
+            n_loaded = load_blocks(egtb, needed_blocks(egtb, orders, sample, block_size, nthreads), nthreads, dict);
+        } else {
+            egtb.load_egtb_from_compressed_file(nthreads);
+            build_value_dict(egtb.TB, egtb.num_pos, nthreads, dict);
+        }
 
         // 1. digit order on the original values
         TableInfo info;
         info.egtb = &egtb;
-        std::vector<std::vector<int>> orders = all_digit_orders(egtb.stm_pieces, egtb.sntm_pieces);
         std::vector<Variant> order_variants;
         for (auto& order : orders) order_variants.push_back({order, false, false});
-        std::vector<uint64_t> order_estimates = estimate(info, order_variants, block_size, opt, nthreads);
+        std::vector<uint64_t> order_estimates = estimate(info, order_variants, sample, block_size, dict, opt, nthreads);
         uint64_t best = std::min_element(order_estimates.begin(), order_estimates.end()) - order_estimates.begin();
         if (1.0 - (double) order_estimates[best] / order_estimates[0] < opt.min_gain) best = 0;
         const std::vector<int>& order = orders[best];
@@ -366,10 +479,11 @@ int main(int argc, char *argv[]) {
             egtb.free_tb();
             return 1;
         }
-        compute_bits(info, capture_tables, nthreads);
+        if (opt.dry_run) compute_bits(info, capture_tables, nthreads, &sample, &order, block_size); // only the sample
+        else compute_bits(info, capture_tables, nthreads);
         for (auto& kv : capture_tables) { kv.second->free_tb(); delete kv.second; }
         std::vector<Variant> fill_variants = {{order, true, false}, {order, true, true}};
-        std::vector<uint64_t> fill_estimates = estimate(info, fill_variants, block_size, opt, nthreads);
+        std::vector<uint64_t> fill_estimates = estimate(info, fill_variants, sample, block_size, dict, opt, nthreads);
         bool use_dc = opt.use_dc && info.n_capture_dc > 0 && fill_estimates[1] <= (1.0 - opt.dc_min_gain) * fill_estimates[0];
         Variant variant = {order, true, use_dc};
         double gain = 1.0 - (double) fill_estimates[use_dc ? 1 : 0] / order_estimates[0];
@@ -389,7 +503,8 @@ int main(int argc, char *argv[]) {
             est_before += size_before;
             est_after += size_estimate;
             if (rewrite) { est_rewritten++; est_dc += use_dc; } else { est_kept++; }
-            std::cout << (rewrite ? ", would be rewritten" : ", would stay unchanged") << std::endl;
+            std::cout << (rewrite ? ", would be rewritten" : ", would stay unchanged") << " (" << n_loaded << " of "
+                      << egtb.CTB->n_blocks << " blocks loaded, " << (double) (now() - t_start) / 1000.0 << "s)" << std::endl;
             egtb.free_tb();
             continue;
         }
