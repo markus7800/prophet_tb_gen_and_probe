@@ -698,8 +698,14 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
                             uint64_t egbt_ix = egtb->ix_from_pos(transformed_pos);
 
                             // collisions should be very rare (e.g. two pawns that can promote)
+                            // `omp atomic compare` needs OpenMP 5.1 (GCC 12+ / Clang 15+), otherwise atomic max via CAS loop
+                            #if (defined(__clang__) && __clang_major__ >= 15) || (!defined(__clang__) && __GNUC__ >= 12)
                             #pragma omp atomic compare
                             if (egtb->TB[egbt_ix] < lb) { egtb->TB[egbt_ix] = lb; }
+                            #else
+                            int16_t cur = __atomic_load_n(&egtb->TB[egbt_ix], __ATOMIC_RELAXED);
+                            while (cur < lb && !__atomic_compare_exchange_n(&egtb->TB[egbt_ix], &cur, lb, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
+                            #endif
                             // if egtb->TB[egbt_ix] is unset (==0), then 0 < VAL_TO_LOWERBOUND(LOSS_IN(0))
 
                             transformed_pos.undo_rev_move(rev_move);

@@ -40,6 +40,14 @@ individual compressed blocks concatenated at byte level
 uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nthreads);
 uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose);
 
+// reads header of compressed file, returns false if file cannot be read or is too small
+bool read_compressed_header(std::string compressed_filename, uint64_t& checksum, uint64_t& num_pos, uint64_t& block_size);
+// checks that compressed file is not truncated, i.e. header, block sizes and all blocks are present
+bool is_complete_compressed_file(std::string compressed_filename);
+// decompresses source and block-compresses it with block_size to target (source == target is allowed)
+// verifies that target is complete and matches source, exits otherwise
+void recompress_TB(std::string source_filename, std::string target_filename, int nthreads, int compression_level, uint64_t block_size, bool verbose);
+
 struct DecompressCtx {
   int egtb_ix;
   uint64_t uncompressed_block_ix;
