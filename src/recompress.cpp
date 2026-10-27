@@ -8,7 +8,7 @@
 namespace fs = std::filesystem;
 
 /*
-Recompresses all .bz files in [source] with a different block size and writes them to [target],
+Recompresses all .bz files (DTM .egtb.bz and WDL .wdl.bz) in [source] with a different block size and writes them to [target],
 keeping the relative folder structure (e.g. [source]/5men/0pawns/KQKRB.egtb.bz -> [target]/5men/0pawns/KQKRB.egtb.bz).
 
 Files that already exist in [target] are skipped if they are complete, have the target block size and

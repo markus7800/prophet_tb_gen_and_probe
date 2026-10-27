@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
         fs::path egtb_path = egtb_paths[i];
         std::string egtb_filename = egtb_path.filename().u8string();
         std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
-        EGTB egtb = EGTB(egtb_path.parent_path().u8string(), egtb_id);
+        EGTB egtb = EGTB(egtb_path.parent_path().u8string(), egtb_id, is_wdl_filename(egtb_path.u8string()));
 
         uint64_t checksum, num_pos, block_size;
         if (!read_compressed_header(egtb_path.u8string(), checksum, num_pos, block_size)) {
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
         std::string egtb_folder = egtb_path.parent_path().u8string();
         std::string egtb_filename = egtb_path.filename().u8string();;
         std::string egtb_id = egtb_filename.substr(0, egtb_filename.find_first_of("."));
-        EGTB egtb = EGTB(egtb_folder, egtb_id);
+        EGTB egtb = EGTB(egtb_folder, egtb_id, is_wdl_filename(egtb_path.u8string()));
 
         if (!complete[i]) {
             all_ok = false;
@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
         #pragma omp critical
         {
             count++;
-            std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_id << (ok ? " OK" : " ERROR") << std::endl;
+            std::cout << "Finished check " << count << "/" << egtb_paths.size() << ": " << egtb_path.filename().u8string() << (ok ? " OK" : " ERROR") << std::endl;
         }
 
     }

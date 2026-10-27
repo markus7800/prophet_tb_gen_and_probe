@@ -13,6 +13,7 @@ void prophet_tb_init();
 void prophet_tb_deinit();
 
 // recursively searches path and adds TB files
+// DTM files (*.egtb.bz) are used for prophet_tb_probe_dtm, WDL files (*.wdl.bz) for prophet_tb_probe_wdl
 // returns number of files added
 int prophet_tb_add_path(const char* path);
 
@@ -76,6 +77,16 @@ int prophet_tb_is_valid_position(const int pieces[6], const int squares[6], cons
 // this function is thread-safe
 int prophet_tb_probe_dtm(const int pieces[6], const int squares[6], const int stm, const int ep_square);
 
+// for valid positions, prophet_tb_probe_wdl:
+// returns     1 if win
+// returns     0 if draw
+// returns    -1 if loss (including checkmate)
+// returns -1001 if a required table is missing
+// WDL files only store whether the side-to-move wins, so for non-winning positions all moves are expanded
+// thus, WDL tables for both sides are required (if the side-to-move table is missing, no search is performed)
+// this function is thread-safe
+int prophet_tb_probe_wdl(const int pieces[6], const int squares[6], const int stm, const int ep_square);
+
 // for better performance reuse prophet_tb_decompress_ctx
 // for multi-threading use one prophet_tb_decompress_ctx per thread
 // all functions below are thread-safe
@@ -83,6 +94,7 @@ typedef struct DecompressCtx prophet_tb_decompress_ctx;
 prophet_tb_decompress_ctx* prophet_tb_create_decompress_ctx();
 void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx);
 int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx);
+int prophet_tb_probe_wdl_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx);
 
 
 #ifdef __cplusplus

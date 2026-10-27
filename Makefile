@@ -31,7 +31,7 @@ endif
 
 prophet: flags += -fPIC
 
-.PHONY: lib gen mates compress recompress prophet check test clean
+.PHONY: lib gen mates compress recompress wdl prophet check test clean
 
 build:
 	mkdir -p build
@@ -61,6 +61,9 @@ compress: | build
 
 recompress: | build
 	$(CC) -g $(flags) -o build/recompress.out src/recompress.cpp src/compressed_tb.cpp $(lzstd)
+
+wdl: | build
+	$(CC) -g $(flags) -o build/to_wdl.out src/to_wdl.cpp src/compressed_tb.cpp $(lzstd)
 
 prophet: lib | build
 	$(CC) -g $(flags) -shared -o build/libprophet.so src/prophet.cpp $(corefiles) $(lzstd)

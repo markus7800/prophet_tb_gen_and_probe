@@ -92,13 +92,15 @@ void EGTB::init_compressed_tb() {
         assert (this->CTB == nullptr);
         this->CTB = new CompressedTB(
             EGTB_ID_TO_IX[this->id],
-            this->get_filename() + COMP_EXT
+            this->get_compressed_filename(),
+            this->wdl
         );
         this->compressed = true;
     }
 }
 
 void EGTB::load_egtb_from_compressed_file(int nthreads) {
+    assert (!this->wdl);
     if (!this->compressed) this->init_compressed_tb();
     assert (this->CTB != nullptr);
     assert (!this->loaded);

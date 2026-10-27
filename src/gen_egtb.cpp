@@ -490,7 +490,7 @@ void GenEGTB::check_consistency_max_bytes_allocated(int nthreads, uint64_t max_b
             #pragma omp parallel num_threads(nthreads) 
             {
 
-                DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE);
+                DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE * sizeof(int16_t));
 
                 #pragma omp for schedule(static,BLOCKSIZE)
                 for (uint64_t ix = 0; ix < LOSS_EGTB->num_pos; ix++) {
@@ -672,7 +672,7 @@ void GenEGTB::retrograde_promotion_tbs(int nthreads) {
 
             #pragma omp parallel num_threads(nthreads)
             {
-                DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE);
+                DecompressCtx* dctx = new DecompressCtx(BLOCKSIZE * sizeof(int16_t));
             
                 #pragma omp for schedule(static, BLOCKSIZE)
                 for (uint64_t ix = 0; ix < PROMO_EGTB->num_nonep_pos; ix++) {

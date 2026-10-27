@@ -13,26 +13,45 @@ uint64_t compute_checksum(int16_t* TB, uint64_t num_pos, [[maybe_unused]] int nt
   return s;
 }
 
+uint64_t compute_checksum_WDL(uint8_t* WDL, uint64_t num_bytes, [[maybe_unused]] int nthreads) {
+  uint64_t s = 0;
+  #pragma omp parallel for num_threads(nthreads) schedule(static) reduction(^:s)
+  for (uint64_t ix = 0; ix < num_bytes; ix++) {
+    s ^= (ix << 10) | ((uint64_t) WDL[ix]);
+  }
+  return s;
+}
+
+bool is_wdl_filename(std::string compressed_filename) {
+  std::string ext = std::string(WDL_EXT) + COMP_EXT;
+  return compressed_filename.size() >= ext.size() && compressed_filename.compare(compressed_filename.size() - ext.size(), ext.size(), ext) == 0;
+}
+
 bool CompressedTB::check_integrity([[maybe_unused]] int nthreads) {
   uint64_t s = 0;
 
   #pragma omp parallel num_threads(nthreads)
   {
-    DecompressCtx* dctx = new DecompressCtx(block_size);
+    DecompressCtx* dctx = new DecompressCtx(get_max_uncompressed_block_size());
     uint64_t local_s = 0;
 
     #pragma omp for schedule(static)
-    for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
-      uint64_t block_ix = start_ix / block_size;
-      uint64_t offset = get_block_offset(block_ix);
-      uint64_t block_npos = std::min(block_size, num_pos - start_ix);
-      size_t res = ZSTD_decompressDCtx(dctx->decompressor,
-        dctx->uncompressed_buf, block_npos * sizeof(int16_t),
-        &compressed_blocks[offset], get_block_size(block_ix));
-      assert (!ZSTD_isError(res));
+    for (uint64_t block_ix = 0; block_ix < n_blocks; block_ix++) {
+      decompress_block(block_ix, dctx->uncompressed_buf, dctx->decompressor);
 
-      for (uint64_t ix = start_ix; ix < start_ix + block_npos; ix++) {
-        local_s ^= (ix << 10) | ((uint64_t) abs(dctx->uncompressed_buf[ix - start_ix]));
+      if (wdl) {
+        uint64_t start_ix = block_ix * (block_size / 8);
+        uint64_t block_nbytes = get_uncompressed_block_size(block_ix);
+        for (uint64_t ix = start_ix; ix < start_ix + block_nbytes; ix++) {
+          local_s ^= (ix << 10) | ((uint64_t) dctx->uncompressed_buf[ix - start_ix]);
+        }
+      } else {
+        int16_t* buf = (int16_t*) dctx->uncompressed_buf;
+        uint64_t start_ix = block_ix * block_size;
+        uint64_t block_npos = std::min(block_size, num_pos - start_ix);
+        for (uint64_t ix = start_ix; ix < start_ix + block_npos; ix++) {
+          local_s ^= (ix << 10) | ((uint64_t) abs(buf[ix - start_ix]));
+        }
       }
     }
 
@@ -46,33 +65,33 @@ bool CompressedTB::check_integrity([[maybe_unused]] int nthreads) {
   return (s == checksum);
 }
 
-uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose) {
-  uint64_t tb_size_bytes = num_pos * sizeof(int16_t);
-  uint64_t checksum = compute_checksum(TB, num_pos, nthreads);
-
+// compresses data of total_bytes bytes in blocks of block_bytes bytes, where each block corresponds to block_size positions
+// compressed blocks are stored in place in data
+uint64_t block_compress_bytes(uint8_t* data, uint64_t total_bytes, uint64_t block_bytes, uint64_t checksum, uint64_t num_pos, [[maybe_unused]] int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose) {
   uint64_t n_blocks = ceil((double) num_pos / block_size);
+  assert (n_blocks == total_bytes / block_bytes + (total_bytes % block_bytes != 0));
   uint64_t* block_sizes = (uint64_t*) malloc(n_blocks * sizeof(uint64_t));  
 
   bool large_blocks = block_size > uint64_t(UINT16_MAX);
   uint64_t max_compressed_block_size = large_blocks ? UINT32_MAX : UINT16_MAX;
   uint64_t final_size = 0;
 
-  // compressed blocks are stored in place in TB, blocks that do not fit (e.g. a tiny last block) are stored here
+  // compressed blocks are stored in place in data, blocks that do not fit (e.g. a tiny last block) are stored here
   // kept for safety but very unlikely
   std::vector<std::pair<uint64_t, std::vector<uint8_t>>> overflow_blocks;
 
   #pragma omp parallel num_threads(nthreads)
   {
     // thread-private allocations
-    std::vector<uint8_t> compressed(ZSTD_compressBound(block_size * sizeof(int16_t)));
+    std::vector<uint8_t> compressed(ZSTD_compressBound(block_bytes));
 
 
     #pragma omp for schedule(static) reduction(+:final_size)
-    for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
-      uint64_t size = std::min(block_size, num_pos - start_ix) * sizeof(int16_t);
-      uint64_t block_ix = start_ix / block_size;
+    for (uint64_t block_ix = 0; block_ix < n_blocks; block_ix++) {
+      uint64_t start = block_ix * block_bytes;
+      uint64_t size = std::min(block_bytes, total_bytes - start);
 
-      uint64_t compressed_size = ZSTD_compress(compressed.data(), compressed.size(),  (uint8_t*) &TB[start_ix], size, compression_level);
+      uint64_t compressed_size = ZSTD_compress(compressed.data(), compressed.size(), &data[start], size, compression_level);
 
       if (ZSTD_isError(compressed_size) || compressed_size == 0) {
         std::cerr << "Compression of block " << block_ix << " failed: " << ZSTD_getErrorName(compressed_size) << std::endl;
@@ -80,14 +99,14 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
       }
       if (compressed_size > max_compressed_block_size) {
         std::cerr << "Compressed size " << compressed_size << " of block " << block_ix << " does not fit into the block size table (max " << max_compressed_block_size << "). ";
-        std::cerr << "Use a block size of at most " << UINT16_MAX / 2 << " or larger than " << UINT16_MAX << "." << std::endl;
+        std::cerr << "Use a smaller block size or one larger than " << UINT16_MAX << "." << std::endl;
         exit(1);
       }
       final_size += compressed_size;
 
       block_sizes[block_ix] = compressed_size;
       if (compressed_size <= size) {
-        std::memcpy(&TB[start_ix], compressed.data(), compressed_size);
+        std::memcpy(&data[start], compressed.data(), compressed_size);
       } else {
         #pragma omp critical
         overflow_blocks.emplace_back(block_ix, std::vector<uint8_t>(compressed.begin(), compressed.begin() + compressed_size));
@@ -120,26 +139,38 @@ uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int comp
     }
 
     auto overflow_block = overflow_blocks.begin();
-    for (uint64_t start_ix = 0; start_ix < num_pos; start_ix += block_size) {
-      uint64_t block_ix = start_ix / block_size;
+    for (uint64_t block_ix = 0; block_ix < n_blocks; block_ix++) {
       if (overflow_block != overflow_blocks.end() && overflow_block->first == block_ix) {
         fwrite(overflow_block->second.data(), sizeof(uint8_t), block_sizes[block_ix], f);
         overflow_block++;
       } else {
-        fwrite(&TB[start_ix], sizeof(uint8_t), block_sizes[block_ix], f);
+        fwrite(&data[block_ix * block_bytes], sizeof(uint8_t), block_sizes[block_ix], f);
       }
-      assert(block_ix * block_size == start_ix);
     }
     fclose(f);
     system(("mv " + compressed_filename + ".tmp " + compressed_filename).c_str());
     if (verbose) std::cout << "Wrote to " << compressed_filename << std::endl;
   }
   
-  if (verbose) std::cout << "Compressed final size: " << final_size << " ratio: " << (double) final_size / tb_size_bytes << std::endl;
+  if (verbose) std::cout << "Compressed final size: " << final_size << " ratio: " << (double) final_size / total_bytes << std::endl;
 
 
   free(block_sizes);
   return final_size;
+}
+
+uint64_t block_compress_TB(int16_t* TB, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose) {
+  uint64_t checksum = compute_checksum(TB, num_pos, nthreads);
+  return block_compress_bytes((uint8_t*) TB, num_pos * sizeof(int16_t), block_size * sizeof(int16_t), checksum,
+    num_pos, nthreads, compression_level, block_size, compressed_filename, write, verbose);
+}
+
+uint64_t block_compress_WDL(uint8_t* WDL, uint64_t num_pos, int nthreads, int compression_level, uint64_t block_size, std::string compressed_filename, bool write, bool verbose) {
+  assert (block_size % 8 == 0);
+  uint64_t num_bytes = wdl_num_bytes(num_pos);
+  uint64_t checksum = compute_checksum_WDL(WDL, num_bytes, nthreads);
+  return block_compress_bytes(WDL, num_bytes, block_size / 8, checksum,
+    num_pos, nthreads, compression_level, block_size, compressed_filename, write, verbose);
 }
 
 
@@ -190,20 +221,28 @@ void recompress_TB(std::string source_filename, std::string target_filename, int
     std::cerr << "Invalid compressed file " << source_filename << std::endl;
     exit(1);
   }
-
-  int16_t* TB = (int16_t*) malloc(num_pos * sizeof(int16_t));
-  if (TB == NULL) {
-    std::cerr << "Could not allocate " << num_pos * sizeof(int16_t) << " bytes." << std::endl;
+  bool wdl = is_wdl_filename(source_filename);
+  if (wdl && block_size % 8 != 0) {
+    std::cerr << "Block size of WDL file has to be divisible by 8." << std::endl;
     exit(1);
   }
+
+  uint8_t* data;
   {
     // unmap source before writing, source may be equal to target
-    CompressedTB ctb = CompressedTB(0, source_filename);
-    ctb.decompress_to_array(nthreads, TB);
+    CompressedTB ctb = CompressedTB(0, source_filename, wdl);
+    data = (uint8_t*) malloc(ctb.get_uncompressed_size());
+    if (data == NULL) {
+      std::cerr << "Could not allocate " << ctb.get_uncompressed_size() << " bytes." << std::endl;
+      exit(1);
+    }
+    if (wdl) ctb.decompress_to_wdl_array(nthreads, data);
+    else ctb.decompress_to_array(nthreads, (int16_t*) data);
   }
   // writes to target_filename.tmp first and then moves it, so an interruption does not leave a partial file
-  block_compress_TB(TB, num_pos, nthreads, compression_level, block_size, target_filename, true, verbose);
-  free(TB);
+  if (wdl) block_compress_WDL(data, num_pos, nthreads, compression_level, block_size, target_filename, true, verbose);
+  else block_compress_TB((int16_t*) data, num_pos, nthreads, compression_level, block_size, target_filename, true, verbose);
+  free(data);
 
   uint64_t new_checksum, new_num_pos, new_block_size;
   if (!read_compressed_header(target_filename, new_checksum, new_num_pos, new_block_size) || !is_complete_compressed_file(target_filename) ||

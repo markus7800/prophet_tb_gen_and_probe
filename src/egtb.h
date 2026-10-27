@@ -31,6 +31,7 @@ struct EGTB {
     bool mmaped;
     bool compressed;
     bool loaded;
+    bool wdl; // if true, the compressed file stores win bits (.wdl.bz) instead of DTM values (.egtb.bz)
 
     std::once_flag has_initialised_compressed_tb;
 
@@ -39,13 +40,15 @@ struct EGTB {
         std::string id_ = get_egtb_identifier(stm_pieces_, sntm_pieces_);
 
         init(folder_, id_, stm_pieces_, sntm_pieces_);
+        wdl = false;
     }
     
-    EGTB(std::string folder_, std::string egtb_id) {
+    EGTB(std::string folder_, std::string egtb_id, bool wdl_ = false) {
         int stm_pieces_[6];
         int sntm_pieces_[6];
         egtb_id_to_pieces(egtb_id, stm_pieces_, sntm_pieces_);
         init(folder_, egtb_id, stm_pieces_, sntm_pieces_);
+        wdl = wdl_;
     }
     ~EGTB() {
         // std::cout << "~EGTB(" << id << ")" << std::endl;
@@ -129,14 +132,24 @@ struct EGTB {
     int16_t query_postion_dctx(EGPosition const &pos, DecompressCtx* dctx) {
         return this->get_value_dctx(this->ix_from_pos(pos), dctx);
     }
+    // thread-safe, only for wdl, returns true if side-to-move wins
+    bool query_win_dctx(EGPosition const &pos, DecompressCtx* dctx) {
+        assert (wdl && compressed);
+        return this->CTB->get_win_dctx(this->ix_from_pos(pos), dctx);
+    }
 
     std::string get_filename() {
         assert (!folder.empty() && folder.back() != '/');
-        return folder + "/" +  id + ".egtb";
+        return folder + "/" +  id + DTM_EXT;
+    }
+
+    std::string get_compressed_filename() {
+        assert (!folder.empty() && folder.back() != '/');
+        return folder + "/" +  id + (wdl ? WDL_EXT : DTM_EXT) + COMP_EXT;
     }
 
     bool exists_compressed() {
-        std::string filename = this->get_filename() + COMP_EXT;
+        std::string filename = this->get_compressed_filename();
         return std::ifstream(filename).good();
     }
 

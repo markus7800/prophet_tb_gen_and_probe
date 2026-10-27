@@ -22,4 +22,13 @@ int dtm(int16_t raw);
 int probe_position_dtm_dctx(EGPosition &pos, DecompressCtx* dctx);
 int probe_position_dtm(EGPosition &pos);
 
+#define WDL_WIN 1
+#define WDL_DRAW 0
+#define WDL_LOSS -1
+// returns WDL_WIN (1) if side-to-move wins, 0 if not, -1001 if WDL table of side-to-move is missing
+int probe_position_win_dctx(EGPosition &pos, DecompressCtx* dctx);
+// returns WDL_WIN, WDL_DRAW, WDL_LOSS or -1001 if a required WDL table is missing
+int probe_position_wdl_dctx(EGPosition &pos, DecompressCtx* dctx);
+int probe_position_wdl(EGPosition &pos);
+
 #endif

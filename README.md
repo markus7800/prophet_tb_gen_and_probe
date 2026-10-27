@@ -56,6 +56,19 @@ OpenMP is recommended for this computation.
 
 On my 32 thread system, 4-men takes <1 minute and 5-men takes <2 hours to compute. (5-men needs 7 GiB disk space and 16GB RAM).
 
+## WDL Tables
+
+For win/draw/loss probing, the DTM tables can be converted to WDL tables, which only store one bit per position (side-to-move wins or not), i.e. 8 positions per byte.
+Build
+```
+make wdl OMP=1
+```
+and run `build/to_wdl.out [source] [target] [threads] [block_size] [compression_level=19]`, which converts every `KQKR.egtb.bz` in `[source]` to `KQKR.wdl.bz` in `[target]` (keeping the folder structure, `[target]` may equal `[source]`). `[block_size]` counts positions and must be divisible by 8.
+
+`prophet_tb_add_path` loads both `.egtb.bz` and `.wdl.bz` files. `prophet_tb_probe_wdl` returns `1` (win), `0` (draw), `-1` (loss) or `-1001` (table missing).
+If the position is not a win, all moves are expanded: it is a loss if all moves lead to a win for the opponent, otherwise a draw.
+Thus, WDL tables of both sides are required (no search is done if the table for the side-to-move is missing).
+
 ## Lichess
 
 Prophet TB has been uploaded and [integrated](https://github.com/lichess-org/lila-tablebase/pull/184) in Lichess.

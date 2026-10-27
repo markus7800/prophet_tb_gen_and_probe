@@ -3,14 +3,7 @@
 #include "kkx.h"
 #include "triangular_indexes.h"
 
-#include <string>
-#include "types.h"
-#include "values.h"
-#include "eg_position.h"
-#include "eg_movegen.h"
-#include "egtb.h"
-#include "egtb_ids.h"
-#include "compressed_tb.h"
+#include "prophet_common.h"
 
 #include <filesystem>
 namespace fs = std::filesystem;
@@ -24,7 +17,11 @@ bool lazy_load = true;
 uint8_t SIDE_CONFIG_IX[1 << 15];
 // indexed by stm config * N_SIDE_CONFIGS + sntm config
 EGTB* EGTB_TABLE[N_SIDE_CONFIGS * N_SIDE_CONFIGS];
-std::vector<EGTB*> egtbs = {};
+EGTB* WDL_TABLE[N_SIDE_CONFIGS * N_SIDE_CONFIGS];
+std::vector<EGTB*> egtbs = {}; // DTM and WDL tables
+
+// buffer is large enough for DTM blocks of 32768 positions and WDL blocks of 524288 positions
+#define DCTX_BUF_BYTES (32768 * sizeof(int16_t))
 
 inline int pack_piece_count(PieceType pt, int count) {
     return count << (3 * (pt - PAWN));
@@ -74,6 +71,7 @@ void prophet_tb_init() {
 
     for (int i = 0; i < N_SIDE_CONFIGS * N_SIDE_CONFIGS; i++) {
         EGTB_TABLE[i] = nullptr;
+        WDL_TABLE[i] = nullptr;
     }
     egtbs.clear();
 }
@@ -87,6 +85,12 @@ int prophet_tb_add_path(const char* path) {
 
             std::string egtb_id = filename.substr(0, filename.find_first_of(".")); 
 
+            // KQKR.egtb.bz -> DTM, KQKR.wdl.bz -> WDL
+            std::string ext = entry.path().stem().extension().u8string();
+            if (ext != DTM_EXT && ext != WDL_EXT) continue;
+            bool wdl = ext == WDL_EXT;
+            EGTB** table = wdl ? WDL_TABLE : EGTB_TABLE;
+
             int stm_pieces[6];
             int sntm_pieces[6];
             egtb_id_to_pieces(egtb_id, stm_pieces, sntm_pieces);
@@ -94,9 +98,9 @@ int prophet_tb_add_path(const char* path) {
             int sntm_ix = side_config_ix(sntm_pieces);
             if (stm_ix == INVALID_SIDE_CONFIG || sntm_ix == INVALID_SIDE_CONFIG) continue;
 
-            if (EGTB_TABLE[stm_ix * N_SIDE_CONFIGS + sntm_ix] == nullptr) {
-                EGTB* egtb = new EGTB(folder, egtb_id);
-                EGTB_TABLE[stm_ix * N_SIDE_CONFIGS + sntm_ix] = egtb;
+            if (table[stm_ix * N_SIDE_CONFIGS + sntm_ix] == nullptr) {
+                EGTB* egtb = new EGTB(folder, egtb_id, wdl);
+                table[stm_ix * N_SIDE_CONFIGS + sntm_ix] = egtb;
                 egtbs.push_back(egtb);
                 count++;
             } 
@@ -129,6 +133,7 @@ void prophet_tb_deinit() {
     egtbs.clear();
     for (int i = 0; i < N_SIDE_CONFIGS * N_SIDE_CONFIGS; i++) {
         EGTB_TABLE[i] = nullptr;
+        WDL_TABLE[i] = nullptr;
     }
 }
 
@@ -190,22 +195,66 @@ int probe_position_dtm_dctx(EGPosition &pos, DecompressCtx* dctx) {
 }
 
 int probe_position_dtm(EGPosition &pos) {
-    DecompressCtx* dctx = new DecompressCtx(32768);
+    DecompressCtx* dctx = new DecompressCtx(DCTX_BUF_BYTES);
     int val = probe_position_dtm_dctx(pos, dctx);
     delete dctx;
     return val;
 }
 
 int16_t probe_position_raw_dtm(EGPosition &pos) {
-    DecompressCtx* dctx = new DecompressCtx(32768);
+    DecompressCtx* dctx = new DecompressCtx(DCTX_BUF_BYTES);
     int val = probe_position_raw_dctx(pos, dctx);
     delete dctx;
     return val;
 }
 
 
+int probe_position_win_dctx(EGPosition &pos, DecompressCtx* dctx) {
+    int stm_ix = side_config_ix(pos, pos.side_to_move());
+    int sntm_ix = side_config_ix(pos, ~pos.side_to_move());
+    if (stm_ix == INVALID_SIDE_CONFIG || sntm_ix == INVALID_SIDE_CONFIG) {
+        return ERROR_TB_MISSING;
+    }
+    // win bits of the other side cannot be used (would need loss information)
+    EGTB* egtb = WDL_TABLE[stm_ix * N_SIDE_CONFIGS + sntm_ix];
+    if (egtb == nullptr) {
+        return ERROR_TB_MISSING;
+    }
+    if (lazy_load) egtb->ensure_compressed_tb_initialised();
+    return egtb->query_win_dctx(pos, dctx);
+}
+
+// pos is modified during search but restored on return
+int probe_position_wdl_dctx(EGPosition &pos, DecompressCtx* dctx) {
+    int win = probe_position_win_dctx(pos, dctx);
+    if (win != 0) return win; // WDL_WIN or ERROR_TB_MISSING
+
+    // not a win -> loss if all moves lead to a win for opponent, otherwise draw
+    EGMoveList movelist = EGMoveList(pos);
+    if (movelist.size() == 0) {
+        return pos.stm_in_check() ? WDL_LOSS : WDL_DRAW;
+    }
+    bool missing = false;
+    for (Move move : movelist) {
+        UndoInfo u = pos.do_move(move);
+        int opponent_win = probe_position_win_dctx(pos, dctx);
+        pos.undo_move(u);
+        if (opponent_win == 0) return WDL_DRAW;
+        if (opponent_win == ERROR_TB_MISSING) missing = true;
+    }
+    return missing ? ERROR_TB_MISSING : WDL_LOSS;
+}
+
+int probe_position_wdl(EGPosition &pos) {
+    DecompressCtx* dctx = new DecompressCtx(DCTX_BUF_BYTES);
+    int val = probe_position_wdl_dctx(pos, dctx);
+    delete dctx;
+    return val;
+}
+
+
 prophet_tb_decompress_ctx* prophet_tb_create_decompress_ctx() {
-    return new DecompressCtx(32768);
+    return new DecompressCtx(DCTX_BUF_BYTES);
 }
 void prophet_tb_free_decompress_ctx(prophet_tb_decompress_ctx* dctx) {
     delete dctx;
@@ -240,8 +289,7 @@ int prophet_tb_is_valid_position(const int pieces[6], const int squares[6], cons
 }
 
 
-int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx) {
-    EGPosition pos;
+void set_position(EGPosition &pos, const int pieces[6], const int squares[6], const int stm, const int ep_square) {
     pos.reset();
     for (int i = 0; i < 6; i++) {
         if (pieces[i] != NO_PIECE) {
@@ -250,13 +298,31 @@ int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const i
     }
     pos.set_side_to_move(Color(stm));
     if (ep_square != 0 && ep_square != SQ_NONE) pos.set_ep_square(Square(ep_square));
+}
+
+int prophet_tb_probe_dtm_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx) {
+    EGPosition pos;
+    set_position(pos, pieces, squares, stm, ep_square);
     return probe_position_dtm_dctx(pos, dctx);
 }
 
 
 int prophet_tb_probe_dtm(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
-    DecompressCtx* dctx = new DecompressCtx(32768);
+    DecompressCtx* dctx = new DecompressCtx(DCTX_BUF_BYTES);
     int val = prophet_tb_probe_dtm_dctx(pieces, squares, stm, ep_square, dctx);
+    delete dctx;
+    return val;
+}
+
+int prophet_tb_probe_wdl_dctx(const int pieces[6], const int squares[6], const int stm, const int ep_square, prophet_tb_decompress_ctx* dctx) {
+    EGPosition pos;
+    set_position(pos, pieces, squares, stm, ep_square);
+    return probe_position_wdl_dctx(pos, dctx);
+}
+
+int prophet_tb_probe_wdl(const int pieces[6], const int squares[6], const int stm, const int ep_square) {
+    DecompressCtx* dctx = new DecompressCtx(DCTX_BUF_BYTES);
+    int val = prophet_tb_probe_wdl_dctx(pieces, squares, stm, ep_square, dctx);
     delete dctx;
     return val;
 }
