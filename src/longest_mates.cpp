@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
 
     std::vector<fs::path> all_egtb_paths;
     for (const auto & entry : fs::recursive_directory_iterator(folder)) {
-        if (entry.path().extension() == COMP_EXT) {
+        if (entry.path().extension() == COMP_EXT && entry.path().stem().extension() == DTM_EXT) {
             std::string filename = entry.path().filename().u8string();
             std::string egtb_id = filename.substr(0, filename.find_first_of("."));
             all_egtb_paths.push_back(entry.path());
