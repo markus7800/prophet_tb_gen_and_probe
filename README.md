@@ -15,6 +15,8 @@ In the full tablebase, there are two files for each piece configuration, e.g. in
 To save space, you may choose to only store one table per piece configuration, which brings size down to 449 GiB.
 However, since all moves have to be expanded and probed for positions where the table is now missing, probing takes on average 10 times longer.
 
+For results see [prophet-tb.com](https://prophet-tb.com/).
+
 ## Building
 
 First, you need to build [zstd](https://github.com/facebook/zstd).
@@ -96,5 +98,3 @@ make check
 1.1T    egtbs/6men
 1.1T    egtbs
 ```
-
-For more details see [prophet-tb.com](https://prophet-tb.com/).
